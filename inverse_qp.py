@@ -29,24 +29,25 @@ class IOC(torch.nn.Module):
         self.eps = eps
         self.nq = nq
         self.isvec = isvec
-        n_vars = 3*nq*n+2*nq
+        self.n_vars = 3*nq*n+2*nq
 
         problem = InverseKinematics(n, nq, tau_lim, dt)
         
         self.A, self.b, self.G, self.h = problem.create_matrices_nn()
-        self.R = self.eps * torch.eye(n_vars)
+        self.R = self.eps * torch.eye(self.n_vars)
         
         if self.isvec:
-            self.Q = torch.zeros((n_vars, n_vars, n_vars), dtype = torch.float)
-            for i in range(n_vars):
+            self.Q = torch.zeros((self.n_vars, self.n_vars, self.n_vars), dtype = torch.float)
+            for i in range(self.n_vars):
                 self.Q[i,i,i] = 1.0
         
-            self.weight = torch.nn.Parameter(torch.rand(n_vars, dtype = torch.float))
+            self.weight = torch.nn.Parameter(torch.rand(self.n_vars, dtype = torch.float))
         else:
-            self.weight = torch.nn.Parameter(torch.tril(torch.rand((n_vars, n_vars), dtype = torch.float)))
+            self.weight = torch.nn.Parameter(torch.tril(torch.rand((self.n_vars, self.n_vars), dtype = torch.float)))
         
-        self.x_nom = torch.nn.Parameter(torch.ones(n_vars, dtype = torch.float))
-        
+        self.x_nom = torch.nn.Parameter(torch.ones(self.n_vars, dtype = torch.float))
+    
+
     def forward(self, x_init):
 
         # makes the weight positive definite
