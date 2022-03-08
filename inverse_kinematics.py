@@ -4,6 +4,7 @@
 ## Author : Avadesh Meduri
 ## Date : 22/02/2022
 
+
 import numpy as np 
 
 class InverseKinematics:
@@ -67,8 +68,7 @@ class InverseKinematics:
         self.q[-2*self.nq:] = -2*np.multiply(wt_ter, q_des)
 
         return self.Q, self.q, self.A, self.b, self.G, self.h
-
-            
+        
     def create_matrices_nn(self):
         """
         This function creates matrices for the differenitable QP setup

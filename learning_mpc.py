@@ -3,12 +3,12 @@
 ## Date : 1/03/2022
 
 import numpy as np
-from kuka_bullet_env import KukaBulletEnv
+from py_ioc_qp.kuka_bullet_env import KukaBulletEnv
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
 
-from inverse_qp import IOC
+from py_ioc_qp.inverse_qp import IOC
 import pybullet as p
 
 import time
