@@ -23,7 +23,7 @@ class DiffQP(Function):
         t1 = time.time()
         x_opt, lag = quadprog_solve_qp(Q, q, G, h, A, b)
         t2 = time.time()
-        print("solve time:", t2 - t1)
+        # print("solve time:", t2 - t1)
 
         x_opt, lag = torch.tensor(x_opt), torch.tensor(lag)
         
@@ -69,11 +69,11 @@ class DiffQP(Function):
         dl_dQ = -0.5*(torch.matmul(dz, x_opt.T) + torch.matmul(x_opt, dz.T))
                 
         t2 = time.time()
-        print("backward time:", t2 - t1)
-        print("backward linalg time:", t4 - t3)
+        # print("backward time:", t2 - t1)
+        # print("backward linalg time:", t4 - t3)
 
-        print("kkt :", t6 - t5)
-        print("rest :", t2 - t4)
+        # print("kkt :", t6 - t5)
+        # print("rest :", t2 - t4)
 
         return dl_dQ, dl_dq, None, None, None, None
         
