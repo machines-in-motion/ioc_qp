@@ -45,7 +45,7 @@ class IOC(torch.nn.Module):
         else:
             self.weight = torch.nn.Parameter(torch.tril(torch.rand((self.n_vars, self.n_vars), dtype = torch.float)))
         
-        self.x_nom = torch.nn.Parameter(torch.ones(self.n_vars, dtype = torch.float))
+        self.x_nom = torch.nn.Parameter(0.005*torch.ones(self.n_vars, dtype = torch.float))
     
 
     def forward(self, x_init):
