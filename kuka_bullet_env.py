@@ -76,14 +76,14 @@ class KukaBulletEnv:
         self.tau = np.array(self.tau)
         t = 0.001*np.arange(0, len(self.tau))
 
-        fig, ax = plt.subplots(self.nq,1)
+        fig, ax = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax[i].plot(t, self.q[:,i], label = "joint nb - " + str(i))
             ax[i].legend()
             ax[i].grid()
         fig.suptitle("joint positions")
 
-        fig, ax2 = plt.subplots(self.nq,1)
+        fig, ax2 = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax2[i].plot(t, self.v[:,i], label = "joint nb - " + str(i))
             ax2[i].legend()
@@ -91,7 +91,7 @@ class KukaBulletEnv:
         fig.suptitle("joint velocities")
 
 
-        fig, ax3 = plt.subplots(self.nq,1)
+        fig, ax3 = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax3[i].plot(t, self.tau[:,i], label = "joint nb - " + str(i))
             ax3[i].legend()

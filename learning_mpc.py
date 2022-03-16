@@ -45,8 +45,8 @@ ioc = IOC(n_col, nq, u_max, dt, eps = 1.0, isvec=isvec)
 n_vars = 3*nq*n_col + 2*nq
 
 # loading mean and std
-m = torch.load("./data/mean.pt")
-std = torch.load("./data/std.pt")
+# m = torch.load("./data/mean.pt")
+# std = torch.load("./data/std.pt")
 
 # loading model
 nn = Net(2*nq + 3, 2*n_vars)
@@ -55,7 +55,7 @@ nn.load_state_dict(torch.load("./models/test1"))
 x_des_arr = np.array([[0.5, -0.4, 0.4], [0.6, 0.4, 0.7]])
 
 robot = KukaBulletEnv()
-robot.set_gains(2.5, 0.1)
+robot.set_gains(1.5, 0.05)
 
 q_des = np.array( [1.3737, 0.9711, 1.6139, 1.2188, 1.5669, 0.1236, 0.2565])
 
@@ -64,12 +64,12 @@ robot.reset_robot(q_init, np.zeros_like(q_des))
 
 count = 0
 state = np.zeros(2*nq)
-eps = 15
+eps = 50
 
 # robot.robot.start_recording("./test.mp4")
 target = p.loadURDF("/home/ameduri/devel/workspace/dif_ddp/sphere.urdf", [0,0,0])
 
-for k in range(7):
+for k in range(10):
 
     x_des = x_des_arr[np.random.randint(len(x_des_arr))]
     p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
@@ -82,8 +82,8 @@ for k in range(7):
         state[0:nq] = q
         state[nq:] = dq
         x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des))).float()
-        pred_norm = nn(x_input)
-        pred = pred_norm * std + m
+        pred = nn(x_input)
+        # pred = pred_norm * std + m
 
         if not isvec:
             ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
@@ -95,7 +95,7 @@ for k in range(7):
         x_pred = ioc(state) 
         x_pred = x_pred.detach().numpy()
 
-        for count in range(n_col):
+        for count in range(int(n_col)):
 
             q_des = x_pred[count*3*nq:count*3*nq+nq]
             dq_des = x_pred[count*3*nq+nq:count*3*nq+2*nq]
