@@ -45,3 +45,36 @@ class DiffFrameTranslationCost(Function):
         return torch.hstack((fk_q, fk_dq)), None, None, None
         
 
+class DiffFrameVelocityCost(Function):
+    """
+    This cost provides gradients wrt joint position and velocity for the final end effector/frame velocity
+    """
+    @staticmethod
+    def forward(ctx, state, accel, model, data, f_id):
+        """
+        Input:
+            state : vector (q, dq, a)
+            accel : acceleration of joints
+            model : pinocchio robot model
+            data : pinocchio robot data
+            f_id : frame id for which derivatives are desired
+        """
+        state = state.double().detach().numpy()
+        accel = accel.double().detach().numpy()
+        nq, nv = model.nq, model.nv
+        pin.computeForwardKinematicsDerivatives(model, data, state[0:nq], state[nq:nq + nv], accel)
+        pin.updateFramePlacements(model, data)
+        
+        vel = pin.getFrameVelocity(model, data, f_id, pin.ReferenceFrame.WORLD)
+        dv_dq, dv_ddq = pin.getFrameVelocityDerivatives(model,data,f_id,pin.ReferenceFrame.WORLD)
+        
+        ctx.der = torch.hstack((torch.tensor(dv_dq), torch.tensor(dv_ddq)))
+        
+        return torch.tensor(np.array(vel))
+
+    @staticmethod
+    def backward(ctx, grad):
+        
+        der = ctx.der # derivatives wrt to velocity
+        return der.t()@grad, None, None, None, None
+

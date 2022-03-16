@@ -57,7 +57,7 @@ nn.load_state_dict(torch.load("./models/test1"))
 # loading forward pass class
 iocfp = IOCForwardPass(nn, ioc, m, std)
 
-x_des_arr = np.array([[0.5, -0.4, 0.4], [0.6, 0.4, 0.7]])
+x_des_arr = np.array([[0.5, -0.4, 0.4], [0.6, 0.4, 0.7], [0.3, -0.4, 0.6], [0.2, 0.6, 0.1]])
 
 robot = KukaBulletEnv()
 robot.set_gains(1.5, 0.05)
@@ -69,51 +69,53 @@ robot.reset_robot(q_init, np.zeros_like(q_des))
 
 count = 0
 state = np.zeros(2*nq)
-eps = 15
+eps = 25
+nb_switches = 5
+count = 0
 
 # robot.robot.start_recording("./test.mp4")
 target = p.loadURDF("./sphere.urdf", [0,0,0])
 
-for k in range(10):
 
-    x_des = x_des_arr[np.random.randint(len(x_des_arr))]
-    p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
-        
-    # print("running feedback number : " + str(j),  end = '\r', flush = True )
+for v in range(nb_switches*n_col*eps) :
+
     q, dq = robot.get_state()
+    if v % (n_col*eps) == 0:
+        x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
+        # print("running feedback number : " + str(j),  end = '\r', flush = True )
+        robot.plan.append(1)
+    
+    if v == 0:
+        x_pred = iocfp.predict(q, dq, x_des)
 
-    x_pred = iocfp.predict(q, dq, x_des)
-    robot.plan.append(1)
-    count = 0
-    for v in range(n_col*eps) :
-        
-        q_des = x_pred[count*3*nq:count*3*nq+nq]
-        dq_des = x_pred[count*3*nq+nq:count*3*nq+2*nq]
-        a_des = x_pred[count*3*nq + 2*nq:count*3*nq+3*nq]
 
-        if count == n_col-1:
-            q, dq = robot.get_state()
-            x_pred = iocfp.predict(q, dq, x_des)
-            robot.plan.append(1)
-            count = -1
-            
-        tmp = count + 1
-        nq_des = x_pred[tmp*3*nq:tmp*3*nq+nq]
-        ndq_des = x_pred[tmp*3*nq+nq:tmp*3*nq+2*nq]
-        na_des = x_pred[tmp*3*nq + 2*nq:tmp*3*nq+3*nq]
+    q_des = x_pred[count*3*nq:count*3*nq+nq]
+    dq_des = x_pred[count*3*nq+nq:count*3*nq+2*nq]
+    a_des = x_pred[count*3*nq + 2*nq:count*3*nq+3*nq]
+
+    if count == n_col-1:
+        x_pred = iocfp.predict(q, dq, x_des)
+        robot.plan.append(1)
+        count = -1
         
-        q_int = np.linspace(q_des, nq_des, int(dt/0.001))
-        dq_int = np.linspace(dq_des, ndq_des, int(dt/0.001))
-        a_int = np.linspace(a_des, na_des, int(dt/0.001))
-        
-        count += 1
-        for i in range(int(dt/0.001)):
-            if count == n_col -1 and i == 0:
-                pass
-            else:
-                robot.plan.append(0)
-            robot.send_id_command(q_int[i], dq_int[i], a_int[i])
-            time.sleep(0.0005)
+    tmp = count + 1
+    nq_des = x_pred[tmp*3*nq:tmp*3*nq+nq]
+    ndq_des = x_pred[tmp*3*nq+nq:tmp*3*nq+2*nq]
+    na_des = x_pred[tmp*3*nq + 2*nq:tmp*3*nq+3*nq]
+    
+    q_int = np.linspace(q_des, nq_des, int(dt/0.001))
+    dq_int = np.linspace(dq_des, ndq_des, int(dt/0.001))
+    a_int = np.linspace(a_des, na_des, int(dt/0.001))
+    
+    count += 1
+    for i in range(int(dt/0.001)):
+        if count == n_col -1 and i == 0:
+            pass
+        else:
+            robot.plan.append(0)
+        robot.send_id_command(q_int[i], dq_int[i], a_int[i])
+        time.sleep(0.0005)
 
 robot.plot()
 # robot.robot.stop_recording("./test.mp4")
