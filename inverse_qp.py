@@ -2,6 +2,7 @@
 ## Author : Avadesh Meduri
 ## Date : 22/02/2022
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -65,3 +66,45 @@ class IOC(torch.nn.Module):
         x_opt = DiffQP.apply(self.Q_torch, q, self.G, self.h, self.A, self.b)
         
         return x_opt
+
+
+
+class IOCForwardPass:
+
+    def __init__(self, nn, ioc, m, std):
+        """
+        Input:
+            nn : trained neural network
+            ioc : ioc QP
+            m : mean of the trained data (y_train)
+            std : standard deviation of trained data (y_train)
+        """
+        
+        self.nn = nn
+        self.ioc = ioc
+        self.m = m
+        self.std = std
+
+    def predict(self, q, dq, x_des):
+
+        nq = self.ioc.nq
+        n_vars = self.ioc.n_vars
+        state = np.zeros(2*nq)
+        state[0:nq] = q
+        state[nq:] = dq
+        x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des))).float()
+        pred_norm = self.nn(x_input)
+        pred = pred_norm * self.std + self.m
+
+        if not self.ioc.isvec:
+            self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
+            self.ioc.x_nom = torch.nn.Parameter(pred[n_vars**2:])
+        else:
+            self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
+            self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
+
+        x_pred = self.ioc(state) 
+        x_pred = x_pred.detach().numpy()
+
+        return x_pred
+

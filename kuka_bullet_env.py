@@ -34,6 +34,7 @@ class KukaBulletEnv:
         self.q = []
         self.v = []
         self.tau = []
+        self.plan = []
 
     def reset_robot(self, q0, dq0):
         self.robot.reset_state(q0, dq0)
@@ -76,9 +77,11 @@ class KukaBulletEnv:
         self.tau = np.array(self.tau)
         t = 0.001*np.arange(0, len(self.tau))
 
+        ind = np.where(np.array(self.plan) == 1)
         fig, ax = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax[i].plot(t, self.q[:,i], label = "joint nb - " + str(i))
+            ax[i].scatter(t[ind], self.q[:,i][ind], color = "red")
             ax[i].legend()
             ax[i].grid()
         fig.suptitle("joint positions")
@@ -86,6 +89,7 @@ class KukaBulletEnv:
         fig, ax2 = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax2[i].plot(t, self.v[:,i], label = "joint nb - " + str(i))
+            ax2[i].scatter(t[ind], self.v[:,i][ind], color = "red")
             ax2[i].legend()
             ax2[i].grid()
         fig.suptitle("joint velocities")
@@ -94,9 +98,11 @@ class KukaBulletEnv:
         fig, ax3 = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax3[i].plot(t, self.tau[:,i], label = "joint nb - " + str(i))
+            ax3[i].scatter(t[ind], self.tau[:,i][ind], color = "red")
             ax3[i].legend()
             ax3[i].grid()
         fig.suptitle("joint torques")
+
 
 
         plt.show()
