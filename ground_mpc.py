@@ -23,15 +23,19 @@ f_id = model.getFrameId("EE")
 dtc = DiffFrameTranslationCost.apply
 
 def quadratic_loss(q_pred, x_des, nq, n_col):
-    loss = 1.5e1*torch.linalg.norm(dtc(q_pred[-2*nq:], model, data, f_id) - x_des)
-    loss += 3e-2*torch.linalg.norm(q_pred[-2*nq:-nq]) # joint regularization
-    loss += 5e-1*torch.linalg.norm(q_pred[-nq:])
+    loss = 2.5e1*torch.linalg.norm(dtc(q_pred[-2*nq:], model, data, f_id) - x_des)
+    loss += 1e-2*torch.linalg.norm(q_pred[-2*nq:-nq]) # joint regularization
+    loss += 8e-1*torch.linalg.norm(q_pred[-nq:])
     for i in range(n_col):    
-        loss += 1e1*torch.linalg.norm(dtc(q_pred[(3*i)*nq: (3*i+2)*nq], model, data, f_id) - x_des)
+        loss += 1e0*torch.linalg.norm(dtc(q_pred[(3*i)*nq: (3*i+2)*nq], model, data, f_id) - x_des)
         loss += 1e-2*torch.linalg.norm(q_pred[(3*i+2)*nq: (3*i+3)*nq]) # control regularization
         loss += 5e-1*torch.linalg.norm(q_pred[(3*i+1)*nq: (3*i+2)*nq]) # velocity regularization
-        loss += 3e-2*torch.linalg.norm(q_pred[(3*i)*nq: (3*i+1)*nq]) # joint regularization
-    
+        loss += 3e-3*torch.linalg.norm(q_pred[(3*i)*nq: (3*i+1)*nq]) # joint regularization
+        
+        if i < n_col - 1:
+            loss += 5e-2*torch.linalg.norm(torch.subtract(q_pred[(3*i+2)*nq: (3*i+3)*nq], \
+                                                          q_pred[(3*i+5)*nq: (3*i+6)*nq]))
+
     return loss
 
 def regress(q, dq):
@@ -82,12 +86,12 @@ robot.reset_robot(q_init, np.zeros_like(q_des))
 
 count = 0
 state = np.zeros(2*nq)
-eps = 20
+eps = 15
 
 # robot.robot.start_recording("./test.mp4")
-target = p.loadURDF("/home/ameduri/pydevel/ioc_qp/sphere.urdf", [0,0,0])
+target = p.loadURDF("./sphere.urdf", [0,0,0])
 
-for k in range(10):
+for k in range(5):
 
     x_des = x_des_arr[np.random.randint(len(x_des_arr))]
     p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))

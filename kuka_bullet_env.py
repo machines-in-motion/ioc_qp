@@ -81,7 +81,7 @@ class KukaBulletEnv:
         fig, ax = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax[i].plot(t, self.q[:,i], label = "joint nb - " + str(i))
-            ax[i].scatter(t[ind], self.q[:,i][ind], color = "red")
+            # ax[i].scatter(t[ind], self.q[:,i][ind], color = "red")
             ax[i].legend()
             ax[i].grid()
         fig.suptitle("joint positions")
@@ -89,7 +89,7 @@ class KukaBulletEnv:
         fig, ax2 = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax2[i].plot(t, self.v[:,i], label = "joint nb - " + str(i))
-            ax2[i].scatter(t[ind], self.v[:,i][ind], color = "red")
+            # ax2[i].scatter(t[ind], self.v[:,i][ind], color = "red")
             ax2[i].legend()
             ax2[i].grid()
         fig.suptitle("joint velocities")
@@ -98,7 +98,7 @@ class KukaBulletEnv:
         fig, ax3 = plt.subplots(self.nq,1, sharex = True)
         for i in range(self.nq):
             ax3[i].plot(t, self.tau[:,i], label = "joint nb - " + str(i))
-            ax3[i].scatter(t[ind], self.tau[:,i][ind], color = "red")
+            # ax3[i].scatter(t[ind], self.tau[:,i][ind], color = "red")
             ax3[i].legend()
             ax3[i].grid()
         fig.suptitle("joint torques")
