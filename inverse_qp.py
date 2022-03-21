@@ -33,6 +33,8 @@ class IOC(torch.nn.Module):
         self.n_vars = 3*nq*n+2*nq
 
         problem = InverseKinematics(n, nq, tau_lim, dt)
+        self.n_col = problem.n
+        self.dt = problem.dt
         
         self.A, self.b, self.G, self.h = problem.create_matrices_nn()
         self.R = self.eps * torch.eye(self.n_vars)

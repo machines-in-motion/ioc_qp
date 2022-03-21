@@ -115,7 +115,7 @@ for v in range(nb_switches*n_col*eps) :
         else:
             robot.plan.append(0)
         robot.send_id_command(q_int[i], dq_int[i], a_int[i])
-        time.sleep(0.0005)
+        # time.sleep(0.0005)
 
 robot.plot()
 # robot.robot.stop_recording("./test.mp4")
