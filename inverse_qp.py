@@ -73,19 +73,29 @@ class IOC(torch.nn.Module):
 
 class IOCForwardPass:
 
-    def __init__(self, nn, ioc, m, std):
+    def __init__(self, nn_dir, m, std):
         """
         Input:
-            nn : trained neural network
+            nn_dir : directory for NN weights
             ioc : ioc QP
             m : mean of the trained data (y_train)
             std : standard deviation of trained data (y_train)
         """
-        
-        self.nn = nn
-        self.ioc = ioc
+
+        self.nq = 7
+        self.n_col = 5
+        self.state = np.zeros(2*self.nq)
+
+        u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
+        self.dt = 0.05
+
+        self.ioc = IOC(self.n_col, self.nq, u_max, self.dt, eps = 1.0, isvec=True)
         self.m = m
         self.std = std
+        self.n_vars = self.ioc.n_vars
+        print("init1")
+        self.nn = Net(2*self.nq + 3, 2*self.n_vars)
+        self.nn.load_state_dict(torch.load(nn_dir))
 
     def predict(self, q, dq, x_des):
 
@@ -98,15 +108,48 @@ class IOCForwardPass:
         pred_norm = self.nn(x_input)
         pred = pred_norm * self.std + self.m
 
-        if not self.ioc.isvec:
-            self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
-            self.ioc.x_nom = torch.nn.Parameter(pred[n_vars**2:])
-        else:
-            self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
-            self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
+        # # if not self.ioc.isvec:
+        #     self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
+        #     self.ioc.x_nom = torch.nn.Parameter(pred[n_vars**2:])
+        # else:
+        self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
+        self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
 
         x_pred = self.ioc(state) 
         x_pred = x_pred.detach().numpy()
 
         return x_pred
+    
+    def predict_rt(self, child_conn):
 
+        print("asfasdf")
+
+        while True:
+            compute, q, dq, x_des = child_conn.recv()
+            print("predicting ...", self.nn)
+            x_pred = self.predict(q, dq, x_des)
+            print("done ...")
+            child_conn.send((x_pred))
+
+def subprocess_mpc_entry(channel, nn_dir, mean, std):
+    print("asdfsfdasdfasdf")
+    planner = IOCForwardPass(nn_dir, mean, std)
+    print("2asfdsaasdfsfdasdfasdf")
+
+    planner.predict_rt(channel)
+
+
+class Net(torch.nn.Module):
+
+    def __init__(self, inp_size, out_size):
+        super(Net, self).__init__()
+        self.fc1 = torch.nn.Linear(inp_size, 512)
+        self.fc2 = torch.nn.Linear(512, 512)
+        self.out = torch.nn.Linear(512, out_size)
+
+    def forward(self, x):
+       
+        x = torch.tanh(self.fc1(x))
+        x = torch.tanh(self.fc2(x))
+        x = self.out(x)
+        return x

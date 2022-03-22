@@ -7,9 +7,15 @@ import pinocchio as pin
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
-from inverse_qp import IOC, IOCForwardPass
+from inverse_qp import IOC, IOCForwardPass, subprocess_mpc_entry
+from multiprocessing import Process, Pipe
+import scipy.signal as signal
+from scipy.signal import butter, lfilter
 
 import time
+
+def butter_lowpass(highcut, order=2):
+    return butter(order, highcut, btype='lowpass')
 
 class DiffQPController:
 
@@ -21,7 +27,6 @@ class DiffQPController:
             robot_data : pinocchio data
             nn : trained neural network
             ioc : ioc QP
-            nn_dir : directory for NN weights
             mean : mean of the trained data (y_train)
             std : standard deviation of trained data (y_train)
         """
@@ -29,69 +34,85 @@ class DiffQPController:
         self.head = head
         self.pinModel = robot_model
         self.pinData = robot_data
-
-        self.nq = 7
+        
+        self.nq = self.pinModel.nq
+        # multithreading
+        # Spawn the subprocess to do the parallel processing.
+        self.planner = IOCForwardPass(nn_dir, mean, std)
+        self.nn_dir = nn_dir
+        self.m = mean
+        self.std = std
         self.n_col = 5
-        u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
-        self.dt = 0.05
+        self.parent_conn, self.child_conn = Pipe()
+        self.sent = False
 
-        self.ioc = IOC(self.n_col, self.nq, u_max, self.dt, eps = 1.0, isvec=True)
-
-        self.n_vars = self.ioc.n_vars
-        self.state = torch.zeros(2*self.nq + 3) # q, v, x_des
         self.count = 0 
+        self.dt = 0.05
         self.inter = int(self.dt/0.001)
 
-        self.nn = Net(2*self.nq + 3, 2*self.n_vars)
-        self.nn.load_state_dict(torch.load(nn_dir))
-
-        self.mean = mean
-        self.std = std
-
+        # for plotting
+        self.x_des = np.zeros(3)
+        self.ee_pos = np.zeros(3)
+        self.f_id = self.pinModel.getFrameId("EE")
 
         self.joint_positions = head.get_sensor('joint_positions')
         self.joint_velocities = head.get_sensor("joint_velocities")
 
+        # filter params
+        self.set_vel_filter(0.02)
+        self.filter_vel_z = [[0] for i in range(self.nq)]
+
+    def set_vel_filter(self, percent):
+        self.filter_vel_b = []
+        self.filter_vel_a = []
+
+        for i in range(self.nq):
+            b, a = butter_lowpass(percent, order=1)
+            self.filter_vel_b.append(b)
+            self.filter_vel_a.append(a)
+
     def warmup(self, thread):
-        self.x_pred = self.compute_plan()
-        # pass
+
+        self.subp = Process(target=subprocess_mpc_entry, args=(self.child_conn, self.nn_dir, self.m, self.std))
+        self.subp.start()
+        self.x_pred = self.planner.predict(self.joint_positions, self.joint_velocities, self.x_des)
 
     def update_desired_position(self, x_des):
-        self.state[-3:] = torch.tensor(x_des)
-
-    def compute_plan(self):
-        
-        self.state[0:self.nq] = torch.tensor(self.joint_positions)
-        self.state[self.nq:2*self.nq] = torch.tensor(self.joint_velocities)
-        pred_norm = self.nn(self.state)
-        pred = pred_norm * self.std + self.mean
-        
-        self.ioc.weight = torch.nn.Parameter(pred[0:self.n_vars])
-        self.ioc.x_nom = torch.nn.Parameter(pred[self.n_vars:])
-
-        x_pred = self.ioc(self.state[:-3]) 
-        x_pred = x_pred.detach().numpy()
-
-        return x_pred
+        self.x_des = x_des
         
     def set_gains(self, kp, kd):
         self.kp = kp
         self.kd = kd
 
     def run(self, thread):
-        
+
+        t1 = time.time()
+
+        q = self.joint_positions
+        self.v_fil = self.joint_velocities.copy()
+        for j in range(self.nq):
+            self.v_fil[j], self.filter_vel_z[j] = signal.lfilter(
+                self.filter_vel_b[j], self.filter_vel_a[j],
+                [self.v_fil[j]], zi=self.filter_vel_z[j])
+        v = self.v_fil
+
         if thread.ti % int(self.dt*1000) == 0:
             count = self.count
-            # if thread.ti == 0:
-
             q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]
             dq_des = self.x_pred[count*3*self.nq+self.nq:count*3*self.nq+2*self.nq]
             a_des = self.x_pred[count*3*self.nq + 2*self.nq:count*3*self.nq+3*self.nq]
 
-            if self.count == self.n_col - 1 and thread.ti != 0:
-                self.x_pred = self.compute_plan()
+            if self.count == self.n_col - 2 and thread.ti != 0 and not self.sent:
+                # self.x_pred = self.planner.predict(q, v, self.x_des)
+                self.parent_conn.send((1, q, v, self.x_des))
+                self.sent = True
+                print("computing...")
+            if self.parent_conn.poll():
+                self.x_pred = self.parent_conn.recv()
                 self.count = -1
+                self.sent = False
 
+            print(count)
             count = self.count
             tmp = count + 1
             nq_des = self.x_pred[tmp*3*self.nq:tmp*3*self.nq+self.nq]
@@ -102,33 +123,25 @@ class DiffQPController:
             self.dq_int = np.linspace(dq_des, ndq_des, self.inter)
             self.a_int = np.linspace(a_des, na_des, self.inter)
 
-            self.count += 1
+            self.count = min(self.n_col - 2, self.count + 1)
             self.index = 0
 
+
         # controller
-        q = self.joint_positions
-        v = self.joint_velocities
-        tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, self.a_int[self.index]), (self.nq,))
-        tau_gain = -self.kp*(np.subtract(q.T, self.q_int[self.index].T)) - self.kd*(np.subtract(v.T, self.dq_int[self.index].T))
+
+        q_des = self.q_int[self.index].T
+        dq_des = self.dq_int[self.index].T
+        a_des = self.a_int[self.index]
+        
+        tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, a_des), (self.nq,))
+        tau_gain = -self.kp*(np.subtract(q.T, q_des)) - self.kd*(np.subtract(v.T, dq_des))
         tau_total = np.reshape((tau_gain + tau), (7,)).T
 
         self.index += 1
         t2 = time.time()
+
+        self.time = t2 - t1
+        # for plotting
+        self.ee_pos = self.pinData.oMf[self.f_id].translation
+
         self.head.set_control('ctrl_joint_torques', tau_total)
-
-
-
-class Net(torch.nn.Module):
-
-    def __init__(self, inp_size, out_size):
-        super(Net, self).__init__()
-        self.fc1 = torch.nn.Linear(inp_size, 512)
-        self.fc2 = torch.nn.Linear(512, 512)
-        self.out = torch.nn.Linear(512, out_size)
-
-    def forward(self, x):
-       
-        x = torch.tanh(self.fc1(x))
-        x = torch.tanh(self.fc2(x))
-        x = self.out(x)
-        return x
