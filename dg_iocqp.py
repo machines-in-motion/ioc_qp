@@ -106,21 +106,23 @@ class DiffQPController:
             q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]
             dq_des = self.x_pred[count*3*self.nq+self.nq:count*3*self.nq+2*self.nq]
             a_des = self.x_pred[count*3*self.nq + 2*self.nq:count*3*self.nq+3*self.nq]
-
+        
             if self.count == self.n_col - 2 and thread.ti != 0 and not self.sent:
                 self.parent_conn.send((q, v, self.x_des))
                 self.sent = True
                 self.check = 0
-        
-        if self.parent_conn.poll():
-            self.x_pred = self.parent_conn.recv()
-            self.count = -1
-            self.sent = False
-            print(0.001*self.check)
-            self.check = 0
 
-        if thread.ti % int(self.dt*1000) == 0:
-
+            if self.parent_conn.poll():
+                
+                count = self.n_col - 1 # since a_des does not exist for last collocation point
+                q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]
+                dq_des = self.x_pred[count*3*self.nq+self.nq:count*3*self.nq+2*self.nq]
+                a_des = self.x_pred[count*3*self.nq + 2*self.nq:count*3*self.nq+3*self.nq]
+                self.x_pred = self.parent_conn.recv()
+                self.count = -1
+                self.sent = False
+                self.check = 0
+            
             count = self.count
             tmp = min(count + 1, self.n_col - 1)
             nq_des = self.x_pred[tmp*3*self.nq:tmp*3*self.nq+self.nq]
@@ -135,21 +137,22 @@ class DiffQPController:
             self.index = 0
 
         self.check += 1
-        print(self.count)
         # controller
 
-        q_des = self.q_int[self.index].T
-        dq_des = self.dq_int[self.index].T
-        a_des = self.a_int[self.index]
+        self.q_des = self.q_int[self.index].T
+        self.dq_des = self.dq_int[self.index].T
+        self.a_des = self.a_int[self.index]
         
-        tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, a_des), (self.nq,))
-        tau_gain = -self.kp*(np.subtract(q.T, q_des)) - self.kd*(np.subtract(v.T, dq_des))
+        tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, self.a_des), (self.nq,))
+        tau_gain = -self.kp*(np.subtract(q.T, self.q_des)) - self.kd*(np.subtract(v.T, self.dq_des))
         tau_total = np.reshape((tau_gain + tau), (7,)).T
         self.index += 1
         t2 = time.time()
 
         self.time = t2 - t1
         # for plotting
+        pin.forwardKinematics(self.pinModel, self.pinData, q, v, np.zeros_like(q))
+        pin.updateFramePlacements(self.pinModel, self.pinData)
         self.ee_pos = self.pinData.oMf[self.f_id].translation
 
         self.head.set_control('ctrl_joint_torques', tau_total)

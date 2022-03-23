@@ -27,7 +27,7 @@ if run_sim:
 
     env.add_robot(robot)
     q_des = np.array( [1.3737, 0.9711, 1.6139, 1.2188, 1.5669, 0.1236, 0.2565])
-    q_init =  q_des + 0.3*(np.random.rand(len(q_des)) - 0.5)*2
+    q_init =  q_des + 0.5*(np.random.rand(len(q_des)) - 0.5)*2
     v_init = np.zeros_like(q_init)
     # reader = DataReader('test.mds')
     # q_init = reader.data['joint_positions'][0]
@@ -66,7 +66,10 @@ thread_head = ThreadHead(
 
 thread_head.switch_controllers(ctrl)
 if run_sim:
-    thread_head.sim_run_timed(100000)
+    # thread_head.start_logging(6, "test.mds")
+    thread_head.sim_run_timed(120000)
+    # thread_head.stop_logging()
+
 else:
     thread_head.start()
     thread_head.start_logging(3, "test.mds")
