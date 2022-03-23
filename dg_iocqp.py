@@ -36,13 +36,12 @@ class DiffQPController:
         self.pinData = robot_data
         
         self.nq = self.pinModel.nq
-        # multithreading
-        # Spawn the subprocess to do the parallel processing.
-        self.planner = IOCForwardPass(nn_dir, mean, std)
+
         self.nn_dir = nn_dir
         self.m = mean
         self.std = std
         self.n_col = 5
+        # for sub processes
         self.parent_conn, self.child_conn = Pipe()
         self.sent = False
 
@@ -75,7 +74,13 @@ class DiffQPController:
 
         self.subp = Process(target=subprocess_mpc_entry, args=(self.child_conn, self.nn_dir, self.m, self.std))
         self.subp.start()
-        self.x_pred = self.planner.predict(self.joint_positions, self.joint_velocities, self.x_des)
+
+        q = self.joint_positions
+        v = np.zeros_like(q)
+        self.parent_conn.send((q, v, self.x_des))
+        self.x_pred = self.parent_conn.recv()
+    
+        self.check = 0
 
     def update_desired_position(self, x_des):
         self.x_des = x_des
@@ -103,18 +108,21 @@ class DiffQPController:
             a_des = self.x_pred[count*3*self.nq + 2*self.nq:count*3*self.nq+3*self.nq]
 
             if self.count == self.n_col - 2 and thread.ti != 0 and not self.sent:
-                # self.x_pred = self.planner.predict(q, v, self.x_des)
-                self.parent_conn.send((1, q, v, self.x_des))
+                self.parent_conn.send((q, v, self.x_des))
                 self.sent = True
-                print("computing...")
-            if self.parent_conn.poll():
-                self.x_pred = self.parent_conn.recv()
-                self.count = -1
-                self.sent = False
+                self.check = 0
+        
+        if self.parent_conn.poll():
+            self.x_pred = self.parent_conn.recv()
+            self.count = -1
+            self.sent = False
+            print(0.001*self.check)
+            self.check = 0
 
-            print(count)
+        if thread.ti % int(self.dt*1000) == 0:
+
             count = self.count
-            tmp = count + 1
+            tmp = min(count + 1, self.n_col - 1)
             nq_des = self.x_pred[tmp*3*self.nq:tmp*3*self.nq+self.nq]
             ndq_des = self.x_pred[tmp*3*self.nq+self.nq:tmp*3*self.nq+2*self.nq]
             na_des = self.x_pred[tmp*3*self.nq + 2*self.nq:tmp*3*self.nq+3*self.nq]
@@ -123,10 +131,11 @@ class DiffQPController:
             self.dq_int = np.linspace(dq_des, ndq_des, self.inter)
             self.a_int = np.linspace(a_des, na_des, self.inter)
 
-            self.count = min(self.n_col - 2, self.count + 1)
+            self.count = min(self.n_col - 1, self.count + 1)
             self.index = 0
 
-
+        self.check += 1
+        print(self.count)
         # controller
 
         q_des = self.q_int[self.index].T
@@ -136,7 +145,6 @@ class DiffQPController:
         tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, a_des), (self.nq,))
         tau_gain = -self.kp*(np.subtract(q.T, q_des)) - self.kd*(np.subtract(v.T, dq_des))
         tau_total = np.reshape((tau_gain + tau), (7,)).T
-
         self.index += 1
         t2 = time.time()
 

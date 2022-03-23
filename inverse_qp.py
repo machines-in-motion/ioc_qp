@@ -1,7 +1,7 @@
 ## This class usses diff qp to compute the weights (IOC)
 ## Author : Avadesh Meduri
 ## Date : 22/02/2022
-
+import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -93,7 +93,6 @@ class IOCForwardPass:
         self.m = m
         self.std = std
         self.n_vars = self.ioc.n_vars
-        print("init1")
         self.nn = Net(2*self.nq + 3, 2*self.n_vars)
         self.nn.load_state_dict(torch.load(nn_dir))
 
@@ -121,23 +120,18 @@ class IOCForwardPass:
         return x_pred
     
     def predict_rt(self, child_conn):
-
-        print("asfasdf")
-
         while True:
-            compute, q, dq, x_des = child_conn.recv()
-            print("predicting ...", self.nn)
+            t1 = time.time()
+            q, dq, x_des = child_conn.recv()
             x_pred = self.predict(q, dq, x_des)
-            print("done ...")
             child_conn.send((x_pred))
+            t2 = time.time()
+            print("compute time", t2 - t1)
+
 
 def subprocess_mpc_entry(channel, nn_dir, mean, std):
-    print("asdfsfdasdfasdf")
     planner = IOCForwardPass(nn_dir, mean, std)
-    print("2asfdsaasdfsfdasdfasdf")
-
     planner.predict_rt(channel)
-
 
 class Net(torch.nn.Module):
 
