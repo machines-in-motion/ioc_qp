@@ -14,6 +14,10 @@ from scipy.signal import butter, lfilter
 
 import time
 
+
+x_des_arr = np.array([[0.5, -0.5, 0.4], [0.5, 0.4, 0.6], [0.4, -0.4, 0.4], [0.7, 0.4, 0.5]])
+
+
 def butter_lowpass(highcut, order=2):
     return butter(order, highcut, btype='lowpass')
 
@@ -56,6 +60,9 @@ class DiffQPController:
 
         self.joint_positions = head.get_sensor('joint_positions')
         self.joint_velocities = head.get_sensor("joint_velocities")
+        # self.joint_torques = head.get_sensor("joint_torques_total")
+        # self.joint_ext_torques = head.get_sensor("joint_torques_external")
+
 
         # filter params
         self.set_vel_filter(0.02)
@@ -101,6 +108,14 @@ class DiffQPController:
                 [self.v_fil[j]], zi=self.filter_vel_z[j])
         v = self.v_fil
 
+        # if thread.ti == int(6e+3):
+        #     print("changed")
+        #     self.update_desired_position(x_des_arr[1])
+
+        # if thread.ti == int(12e+3):
+        #     print("changed")
+        #     self.update_desired_position(x_des_arr[0])
+
         if thread.ti % int(self.dt*1000) == 0:
             count = self.count
             q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]
@@ -121,6 +136,7 @@ class DiffQPController:
                 self.x_pred = self.parent_conn.recv()
                 self.count = -1
                 self.sent = False
+                # print(0.001*self.check)
                 self.check = 0
             
             count = self.count
@@ -138,14 +154,19 @@ class DiffQPController:
 
         self.check += 1
         # controller
-
         self.q_des = self.q_int[self.index].T
         self.dq_des = self.dq_int[self.index].T
         self.a_des = self.a_int[self.index]
         
         tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, self.a_des), (self.nq,))
+        # self.gravity = np.reshape(pin.rnea(self.pinModel, self.pinData, q, np.zeros_like(q), np.zeros_like(q)), (self.nq,))
+        
         tau_gain = -self.kp*(np.subtract(q.T, self.q_des)) - self.kd*(np.subtract(v.T, self.dq_des))
-        tau_total = np.reshape((tau_gain + tau), (7,)).T
+        self.tau_total = np.reshape((tau_gain + tau), (7,)).T
+        
+        tau_total = self.tau_total #- self.gravity
+        
+        self.tau_in = tau_total
         self.index += 1
         t2 = time.time()
 
