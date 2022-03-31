@@ -50,7 +50,7 @@ pin_robot = IiwaConfig.buildRobotWrapper()
 m = torch.load("./data/mean.pt")
 std = torch.load("./data/std.pt")
 
-ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, "./models/test1", m, std)
+ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, "./models/test2", m, std)
 ctrl.update_desired_position(x_des)
 ctrl.set_gains(1.5, 0.05)
 
