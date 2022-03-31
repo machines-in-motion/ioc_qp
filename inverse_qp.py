@@ -121,12 +121,12 @@ class IOCForwardPass:
     
     def predict_rt(self, child_conn):
         while True:
-            t1 = time.time()
             q, dq, x_des = child_conn.recv()
+            t1 = time.time()
             x_pred = self.predict(q, dq, x_des)
-            child_conn.send((x_pred))
             t2 = time.time()
-            print("compute time", t2 - t1)
+            child_conn.send((x_pred))
+            # print("compute time", t2 - t1)
 
 
 def subprocess_mpc_entry(channel, nn_dir, mean, std):
