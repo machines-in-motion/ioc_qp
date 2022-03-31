@@ -15,15 +15,15 @@ from scipy.signal import butter, lfilter
 import time
 
 
-x_des_arr = np.array([[0.5, -0.5, 0.4], [0.5, 0.4, 0.6], [0.4, -0.4, 0.4], [0.7, 0.4, 0.5]])
 
+x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])
 
 def butter_lowpass(highcut, order=2):
     return butter(order, highcut, btype='lowpass')
 
 class DiffQPController:
 
-    def __init__(self, head, robot_model, robot_data, nn_dir, mean, std, vicon_name = None):
+    def __init__(self, head, robot_model, robot_data, nn_dir, mean, std, vicon_name = None, run_sim = False):
         """
         Input:
             head : thread head
@@ -35,6 +35,7 @@ class DiffQPController:
             std : standard deviation of trained data (y_train)
         """
 
+        self.run_sim = run_sim
         self.head = head
         self.pinModel = robot_model
         self.pinData = robot_data
@@ -46,6 +47,8 @@ class DiffQPController:
         self.std = std
         self.n_col = 5
         # for sub processes
+        # self.planner = IOCForwardPass(nn_dir, mean, std)
+
         self.parent_conn, self.child_conn = Pipe()
         self.sent = False
 
@@ -79,6 +82,8 @@ class DiffQPController:
 
     def warmup(self, thread):
 
+        # self.x_pred = self.planner.predict(self.joint_positions, self.joint_velocities, self.x_des)
+
         self.subp = Process(target=subprocess_mpc_entry, args=(self.child_conn, self.nn_dir, self.m, self.std))
         self.subp.start()
 
@@ -107,40 +112,38 @@ class DiffQPController:
                 self.filter_vel_b[j], self.filter_vel_a[j],
                 [self.v_fil[j]], zi=self.filter_vel_z[j])
         v = self.v_fil
+        # v = self.joint_velocities.copy()
 
-        # if thread.ti == int(6e+3):
-        #     print("changed")
-        #     self.update_desired_position(x_des_arr[1])
+        if thread.ti < 3*1000:
+            self.update_desired_position(x_des_arr[1])
+        elif thread.ti < 6*1000:
+            print("updated")
+            self.update_desired_position(x_des_arr[0])
+        elif thread.ti < 10*1000:
+            print("updated2")
+            self.update_desired_position(x_des_arr[1])
 
-        # if thread.ti == int(12e+3):
-        #     print("changed")
-        #     self.update_desired_position(x_des_arr[0])
+
 
         if thread.ti % int(self.dt*1000) == 0:
             count = self.count
             q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]
             dq_des = self.x_pred[count*3*self.nq+self.nq:count*3*self.nq+2*self.nq]
             a_des = self.x_pred[count*3*self.nq + 2*self.nq:count*3*self.nq+3*self.nq]
-        
+
             if self.count == self.n_col - 2 and thread.ti != 0 and not self.sent:
+                # self.x_pred = self.planner.predict(q, v, self.x_des)
                 self.parent_conn.send((q, v, self.x_des))
                 self.sent = True
-                self.check = 0
-
+                # print("computing...")
             if self.parent_conn.poll():
-                
-                count = self.n_col - 1 # since a_des does not exist for last collocation point
-                q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]
-                dq_des = self.x_pred[count*3*self.nq+self.nq:count*3*self.nq+2*self.nq]
-                a_des = self.x_pred[count*3*self.nq + 2*self.nq:count*3*self.nq+3*self.nq]
                 self.x_pred = self.parent_conn.recv()
                 self.count = -1
                 self.sent = False
-                # print(0.001*self.check)
-                self.check = 0
-            
+
+            # print(count)
             count = self.count
-            tmp = min(count + 1, self.n_col - 1)
+            tmp = count + 1
             nq_des = self.x_pred[tmp*3*self.nq:tmp*3*self.nq+self.nq]
             ndq_des = self.x_pred[tmp*3*self.nq+self.nq:tmp*3*self.nq+2*self.nq]
             na_des = self.x_pred[tmp*3*self.nq + 2*self.nq:tmp*3*self.nq+3*self.nq]
@@ -149,7 +152,7 @@ class DiffQPController:
             self.dq_int = np.linspace(dq_des, ndq_des, self.inter)
             self.a_int = np.linspace(a_des, na_des, self.inter)
 
-            self.count = min(self.n_col - 1, self.count + 1)
+            self.count = min(self.n_col - 2, self.count + 1)
             self.index = 0
 
         self.check += 1
@@ -159,13 +162,15 @@ class DiffQPController:
         self.a_des = self.a_int[self.index]
         
         tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, self.a_des), (self.nq,))
-        # self.gravity = np.reshape(pin.rnea(self.pinModel, self.pinData, q, np.zeros_like(q), np.zeros_like(q)), (self.nq,))
+        self.gravity = np.reshape(pin.rnea(self.pinModel, self.pinData, q, np.zeros_like(q), np.zeros_like(q)), (self.nq,))
         
         tau_gain = -self.kp*(np.subtract(q.T, self.q_des)) - self.kd*(np.subtract(v.T, self.dq_des))
         self.tau_total = np.reshape((tau_gain + tau), (7,)).T
         
-        tau_total = self.tau_total #- self.gravity
-        
+        tau_total = self.tau_total 
+        if not self.run_sim:
+            tau_total -= self.gravity
+            
         self.tau_in = tau_total
         self.index += 1
         t2 = time.time()

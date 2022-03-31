@@ -18,21 +18,6 @@ robot = IiwaConfig.buildRobotWrapper()
 model, data = robot.model, robot.data
 f_id = model.getFrameId("EE")
 
-class Net(torch.nn.Module):
-
-    def __init__(self, inp_size, out_size):
-        super(Net, self).__init__()
-        self.fc1 = torch.nn.Linear(inp_size, 512)
-        self.fc2 = torch.nn.Linear(512, 512)
-        self.out = torch.nn.Linear(512, out_size)
-
-    def forward(self, x):
-       
-        x = torch.tanh(self.fc1(x))
-        x = torch.tanh(self.fc2(x))
-        x = self.out(x)
-        return x
-
 x_init = np.zeros(14)
 nq = 7
 dt = 0.05
@@ -50,26 +35,28 @@ n_vars = 3*nq*n_col + 2*nq
 m = torch.load("./data/mean.pt")
 std = torch.load("./data/std.pt")
 
-# loading model
-nn = Net(2*nq + 3, 2*n_vars)
-nn.load_state_dict(torch.load("./models/test1"))
-
 # loading forward pass class
-iocfp = IOCForwardPass(nn, ioc, m, std)
+iocfp = IOCForwardPass("./models/test1", m, std)
 
-x_des_arr = np.array([[0.5, -0.4, 0.4], [0.6, 0.4, 0.7], [0.3, -0.4, 0.6], [0.2, 0.6, 0.1]])
+# x_des_arr = np.array([[0.5, -0.4, 0.4], [0.6, 0.4, 0.7], [0.3, -0.4, 0.6], [0.2, 0.6, 0.1]])
+x_train = torch.load("./data/x_train1.pt")
+i = 0
+x_des = x_train[i][-3:].detach().numpy()
 
 robot = KukaBulletEnv()
 robot.set_gains(1.5, 0.05)
 
-q_des = np.array( [1.3737, 0.9711, 1.6139, 1.2188, 1.5669, 0.1236, 0.2565])
+# q_des = np.array( [1.3737, 0.9711, 1.6139, 1.2188, 1.5669, 0.1236, 0.2565])
 
-q_init =  q_des + 0.3*(np.random.rand(len(q_des)) - 0.5)*2
-robot.reset_robot(q_init, np.zeros_like(q_des))
+# q_init =  q_des + 0.3*(np.random.rand(len(q_des)) - 0.5)*2
+q_init = x_train[i][0:7].detach().numpy()
+v_init = x_train[i][7:14].detach().numpy()
+
+robot.reset_robot(q_init, v_init)
 
 count = 0
 state = np.zeros(2*nq)
-eps = 25
+eps = 55
 nb_switches = 5
 count = 0
 
@@ -81,7 +68,7 @@ for v in range(nb_switches*n_col*eps) :
 
     q, dq = robot.get_state()
     if v % (n_col*eps) == 0:
-        x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        # x_des = x_des_arr[np.random.randint(len(x_des_arr))]
         p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
         # print("running feedback number : " + str(j),  end = '\r', flush = True )
         robot.plan.append(1)
