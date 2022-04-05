@@ -133,3 +133,6 @@ data/
 models/
 *.mp4
 extern/
+
+# mypy
+.directory
