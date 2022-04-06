@@ -13,17 +13,17 @@ import scipy.signal as signal
 from scipy.signal import butter, lfilter
 
 import time
-
-
+import pybullet as p
 
 x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])
+
 
 def butter_lowpass(highcut, order=2):
     return butter(order, highcut, btype='lowpass')
 
 class DiffQPController:
 
-    def __init__(self, head, robot_model, robot_data, nn_dir, mean, std, vicon_name = None, run_sim = False):
+    def __init__(self, head, robot_model, robot_data, nn_dir, mean, std, target = None, vicon_name = None, run_sim = False):
         """
         Input:
             head : thread head
@@ -39,7 +39,7 @@ class DiffQPController:
         self.head = head
         self.pinModel = robot_model
         self.pinData = robot_data
-        
+        self.target = target
         self.nq = self.pinModel.nq
 
         self.nn_dir = nn_dir
@@ -56,6 +56,8 @@ class DiffQPController:
         self.dt = 0.05
         self.inter = int(self.dt/0.001)
 
+        self.vicon_name = vicon_name
+
         # for plotting
         self.x_des = np.zeros(3)
         self.ee_pos = np.zeros(3)
@@ -63,8 +65,9 @@ class DiffQPController:
 
         self.joint_positions = head.get_sensor('joint_positions')
         self.joint_velocities = head.get_sensor("joint_velocities")
-        # self.joint_torques = head.get_sensor("joint_torques_total")
-        # self.joint_ext_torques = head.get_sensor("joint_torques_external")
+        if not self.run_sim:
+            self.joint_torques = head.get_sensor("joint_torques_total")
+            self.joint_ext_torques = head.get_sensor("joint_torques_external")
 
 
         # filter params
@@ -93,13 +96,31 @@ class DiffQPController:
         self.x_pred = self.parent_conn.recv()
     
         self.check = 0
+        if not self.vicon_name or self.run_sim:
+            self.prev_cube_pos,  _ = thread.vicon.get_state(self.vicon_name)
+            self.prev_cube_pos = self.prev_cube_pos[0:3]
 
     def update_desired_position(self, x_des):
         self.x_des = x_des
-        
+        if self.target:
+            p.resetBasePositionAndOrientation(self.target, x_des, (0,0,0,1))
+
     def set_gains(self, kp, kd):
         self.kp = kp
         self.kd = kd
+
+    def get_cube_pos(self, thread):
+        cube_pos, _ = thread.vicon.get_state(self.vicon_name)
+        cube_pos = cube_pos[0:3]
+        if np.linalg.norm(cube_pos) > 0:
+            cube_pos[0] += 0.1 
+            cube_pos[2] -= 0.15
+            self.prev_cube_pos = cube_pos
+
+        else:
+            cube_pos = self.prev_cube_pos
+
+        return cube_pos
 
     def run(self, thread):
 
@@ -114,17 +135,15 @@ class DiffQPController:
         v = self.v_fil
         # v = self.joint_velocities.copy()
 
-        if thread.ti < 3*1000:
-            self.update_desired_position(x_des_arr[1])
-        elif thread.ti < 6*1000:
-            print("updated")
-            self.update_desired_position(x_des_arr[0])
-        elif thread.ti < 10*1000:
-            print("updated2")
-            self.update_desired_position(x_des_arr[1])
-
-
-
+        if not self.vicon_name or self.run_sim:
+            x_des = x_des_arr[1] 
+            x_des[1] = 0.5*np.sin(0.0005*thread.ti)
+            x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.5
+        else:
+            x_des = self.get_cube_pos(thread)
+        
+        self.update_desired_position(x_des)
+        
         if thread.ti % int(self.dt*1000) == 0:
             count = self.count
             q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]

@@ -2,7 +2,7 @@ import torch
 from dg_iocqp import DiffQPController
 import pybullet as p
 import numpy as np
-from dynamic_graph_head import ThreadHead, SimHead, HoldPDController
+from dynamic_graph_head import ThreadHead, Vicon, SimHead, HoldPDController
 
 import time
 
@@ -13,7 +13,7 @@ from bullet_utils.env import BulletEnvWithGround
 
 from mim_data_utils import DataLogger, DataReader
 
-run_sim = False
+run_sim = True
 
 x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])
 x_des = x_des_arr[1]
@@ -39,17 +39,17 @@ if run_sim:
     reader = DataReader('test.mds')
     q_init = reader.data['joint_positions'][0]
     v_init = reader.data['joint_velocities'][0]
-    print(q_init, v_init)
+    # print(q_init, v_init)
     robot.reset_state(q_init, v_init)
    
     target = p.loadURDF("./sphere.urdf", [0,0,0])
-    p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
 
     head = SimHead(robot, with_sliders=False)
 
 else:
 
     head = dynamic_graph_manager_cpp_bindings.DGMHead(IiwaConfig.yaml_path)
+    target = None
     env = None
 
 pin_robot = IiwaConfig.buildRobotWrapper()
@@ -58,16 +58,21 @@ pin_robot = IiwaConfig.buildRobotWrapper()
 m = torch.load("./data/mean.pt")
 std = torch.load("./data/std.pt")
 
-ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, "./models/test2", m, std, run_sim = run_sim)
+ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, "./models/test4", m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
 ctrl.update_desired_position(x_des)
-ctrl.set_gains(50.0, 4.5)
-
+if not run_sim:
+    kp = np.array([250.0, 250.0, 250.0, 250.0, 180.0, 30.0, 30.0])
+    kd = np.array([15.0, 15.0, 18.0, 18.0, 18.0, 5.0, 5.0])
+    ctrl.set_gains(kp, kd)
+else:
+    ctrl.set_gains(1.0, 0.05)
 
 thread_head = ThreadHead(
     0.001, # dt.
     HoldPDController(head, 50., 0.5, with_sliders=False), # Safety controllers.
     head, # Heads to read / write from.
-    [], 
+    [('vicon', Vicon('172.24.117.119:801', ['cube10/cube10']))
+    ], 
     env # Environment to step.
 )
 
@@ -75,9 +80,9 @@ thread_head = ThreadHead(
 thread_head.switch_controllers(ctrl)
 if run_sim:
     # thread_head.start_logging(6, "test.mds")
-    thread_head.sim_run_timed(120000)
+    thread_head.sim_run_timed(150000)
     # thread_head.stop_logging()
 
 else:
     thread_head.start()
-    thread_head.start_logging(6, "test.mds")
+    thread_head.start_logging(15, "test.mds")
