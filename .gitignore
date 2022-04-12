@@ -133,3 +133,5 @@ data/
 models/
 *.mp4
 extern/
+*.png
+*.npz
