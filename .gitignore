@@ -135,3 +135,7 @@ models/
 extern/
 *.png
 *.npz
+=======
+
+# mypy
+.directory
