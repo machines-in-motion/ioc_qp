@@ -142,3 +142,5 @@ extern/
 
 ./vision/image_data
 *.avi
+*.jpg
+*.png
