@@ -139,3 +139,6 @@ extern/
 
 # mypy
 .directory
+
+./vision/image_data
+*.avi
