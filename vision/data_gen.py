@@ -33,7 +33,7 @@ class ConstantTorque:
         self.data = {"color_image": [], "depth_image": [], "position": []}
 
     def warmup(self, thread_head):
-        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data1", 0.1, self.child_conn))
+        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data3", 5.0, self.child_conn))
         self.subp.start()
 
         pass

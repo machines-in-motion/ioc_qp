@@ -3,12 +3,15 @@
 ## Date : 22/02/2022
 import time
 import numpy as np
+from pandas import isna
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
 from inverse_kinematics import InverseKinematics
 from diff_qp import DiffQP
+from torchvision.transforms import ToTensor, ToPILImage
+
 
 class IOC(torch.nn.Module):
     
@@ -73,13 +76,14 @@ class IOC(torch.nn.Module):
 
 class IOCForwardPass:
 
-    def __init__(self, nn_dir, m, std):
+    def __init__(self, nn_dir, m, std, cnn_dir = None):
         """
         Input:
             nn_dir : directory for NN weights
             ioc : ioc QP
             m : mean of the trained data (y_train)
             std : standard deviation of trained data (y_train)
+            cnn_dir : directory of cnn weights
         """
 
         self.nq = 7
@@ -95,6 +99,11 @@ class IOCForwardPass:
         self.n_vars = self.ioc.n_vars
         self.nn = Net(2*self.nq + 3, 2*self.n_vars)
         self.nn.load_state_dict(torch.load(nn_dir))
+        
+        if cnn_dir:
+            self.cnet = C_Net()
+            self.cnet.load_state_dict(torch.load(cnn_dir))
+
 
     def predict(self, q, dq, x_des):
 
@@ -119,18 +128,27 @@ class IOCForwardPass:
 
         return x_pred
     
+    def cnn_predict(self, image):
+        image = ToTensor()(image.astype(np.float))[None,:,:,:].float()
+        pred = self.cnet(image)
+
+        return pred
+
     def predict_rt(self, child_conn):
         while True:
-            q, dq, x_des = child_conn.recv()
+            q, dq, x_des, image = child_conn.recv()
             t1 = time.time()
+            if isinstance(image, np.ndarray):
+                c_pred = self.cnn_predict(image)
+            # print(image.shape)
             x_pred = self.predict(q, dq, x_des)
             t2 = time.time()
             child_conn.send((x_pred))
-            # print("compute time", t2 - t1)
+            print("compute time", t2 - t1)
 
 
-def subprocess_mpc_entry(channel, nn_dir, mean, std):
-    planner = IOCForwardPass(nn_dir, mean, std)
+def subprocess_mpc_entry(channel, nn_dir, mean, std, cnn_dir):
+    planner = IOCForwardPass(nn_dir, mean, std, cnn_dir)
     planner.predict_rt(channel)
 
 class Net(torch.nn.Module):
@@ -146,4 +164,24 @@ class Net(torch.nn.Module):
         x = torch.tanh(self.fc1(x))
         x = torch.tanh(self.fc2(x))
         x = self.out(x)
+        return x
+
+class C_Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(4, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(293904, 128)
+        self.fc2 = nn.Linear(128, 128)
+        self.fc3 = nn.Linear(128, 3)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
+#         print(x.shape)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
         return x

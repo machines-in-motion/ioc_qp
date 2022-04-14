@@ -23,7 +23,7 @@ def butter_lowpass(highcut, order=2):
 
 class DiffQPController:
 
-    def __init__(self, head, robot_model, robot_data, nn_dir, mean, std, target = None, vicon_name = None, run_sim = False):
+    def __init__(self, head, robot_model, robot_data, nn_dir, mean, std, cnn_dir = None, target = None, vicon_name = None, run_sim = False):
         """
         Input:
             head : thread head
@@ -43,6 +43,7 @@ class DiffQPController:
         self.nq = self.pinModel.nq
 
         self.nn_dir = nn_dir
+        self.cnn_dir = cnn_dir
         self.m = mean
         self.std = std
         self.n_col = 5
@@ -87,12 +88,12 @@ class DiffQPController:
 
         # self.x_pred = self.planner.predict(self.joint_positions, self.joint_velocities, self.x_des)
 
-        self.subp = Process(target=subprocess_mpc_entry, args=(self.child_conn, self.nn_dir, self.m, self.std))
+        self.subp = Process(target=subprocess_mpc_entry, args=(self.child_conn, self.nn_dir, self.m, self.std, self.cnn_dir))
         self.subp.start()
 
         q = self.joint_positions
         v = np.zeros_like(q)
-        self.parent_conn.send((q, v, self.x_des))
+        self.parent_conn.send((q, v, self.x_des, None))
         self.x_pred = self.parent_conn.recv()
     
         self.check = 0
@@ -122,6 +123,11 @@ class DiffQPController:
 
         return cube_pos
 
+    def get_rgbd(self, thread):
+
+        color_image, depth_image = thread.camera.get_image()
+        return np.concatenate((color_image, depth_image[:,:,None]), axis = 2)
+
     def run(self, thread):
 
         t1 = time.time()
@@ -141,7 +147,8 @@ class DiffQPController:
             x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.5
         else:
             x_des = self.get_cube_pos(thread)
-        
+            image = self.get_rgbd(thread)
+
         self.update_desired_position(x_des)
         
         if thread.ti % int(self.dt*1000) == 0:
@@ -152,7 +159,7 @@ class DiffQPController:
 
             if self.count == self.n_col - 2 and thread.ti != 0 and not self.sent:
                 # self.x_pred = self.planner.predict(q, v, self.x_des)
-                self.parent_conn.send((q, v, self.x_des))
+                self.parent_conn.send((q, v, self.x_des, image))
                 self.sent = True
                 # print("computing...")
             if self.parent_conn.poll():
