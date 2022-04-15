@@ -11,6 +11,10 @@ from torch.nn import functional as F
 from inverse_kinematics import InverseKinematics
 from diff_qp import DiffQP
 from torchvision.transforms import ToTensor, ToPILImage
+from dynamic_graph_head import ImageLogger 
+
+from multiprocessing import Process, Pipe
+
 
 class IOC(torch.nn.Module):
     
@@ -51,7 +55,7 @@ class IOC(torch.nn.Module):
             self.weight = torch.nn.Parameter(torch.tril(torch.rand((self.n_vars, self.n_vars), dtype = torch.float)))
         
         self.x_nom = torch.nn.Parameter(0.005*torch.ones(self.n_vars, dtype = torch.float))
-    
+
 
     def forward(self, x_init):
 
@@ -103,6 +107,14 @@ class IOCForwardPass:
             self.cnet = C_Net()
             self.cnet.load_state_dict(torch.load(cnn_dir, map_location=torch.device('cpu')))
 
+        # for data recording
+        self.img_par, self.img_child = Pipe()
+        self.data = {"color_image": [], "depth_image": [], "position": []}
+        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data4", 0.1, \
+                    self.img_child))
+        self.subp.start()
+        self.ti = 0
+
     def predict(self, q, dq, x_des):
 
         nq = self.ioc.nq
@@ -138,9 +150,15 @@ class IOCForwardPass:
             t1 = time.time()
             if isinstance(image, np.ndarray):
                 # print("predecting..")
-                c_pred = self.cnn_predict(image)
-                print(c_pred, x_des, np.linalg.norm(c_pred - x_des))
-            
+                # c_pred = self.cnn_predict(image)
+                # print(c_pred, x_des, np.linalg.norm(c_pred - x_des))
+                
+                self.data["color_image"] = image[:,:,:3]
+                self.data["depth_image"] = image[:,:,3]
+                self.data["position"] = x_des
+                self.img_par.send((self.data, self.ti))
+                self.ti += 1
+
             x_pred = self.predict(q, dq, x_des)
             t2 = time.time()
             child_conn.send((x_pred))
