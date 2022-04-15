@@ -70,10 +70,12 @@ class DiffQPController:
             self.joint_torques = head.get_sensor("joint_torques_total")
             self.joint_ext_torques = head.get_sensor("joint_torques_external")
 
+        self.image = None
 
         # filter params
         self.set_vel_filter(0.02)
         self.filter_vel_z = [[0] for i in range(self.nq)]
+
 
     def set_vel_filter(self, percent):
         self.filter_vel_b = []
@@ -93,7 +95,7 @@ class DiffQPController:
 
         q = self.joint_positions
         v = np.zeros_like(q)
-        self.parent_conn.send((q, v, self.x_des, None))
+        self.parent_conn.send((q, v, self.x_des, self.image))
         self.x_pred = self.parent_conn.recv()
     
         self.check = 0
@@ -125,7 +127,7 @@ class DiffQPController:
 
     def get_rgbd(self, thread):
 
-        color_image, depth_image = thread.camera.get_image()
+        color_image, depth_image = thread.camera.color_image, thread.camera.depth_image 
         return np.concatenate((color_image, depth_image[:,:,None]), axis = 2)
 
     def run(self, thread):
@@ -141,16 +143,6 @@ class DiffQPController:
         v = self.v_fil
         # v = self.joint_velocities.copy()
 
-        if not self.vicon_name or self.run_sim:
-            x_des = x_des_arr[1] 
-            x_des[1] = 0.5*np.sin(0.0005*thread.ti)
-            x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.5
-        else:
-            x_des = self.get_cube_pos(thread)
-            image = self.get_rgbd(thread)
-
-        self.update_desired_position(x_des)
-        
         if thread.ti % int(self.dt*1000) == 0:
             count = self.count
             q_des = self.x_pred[count*3*self.nq:count*3*self.nq+self.nq]
@@ -159,9 +151,21 @@ class DiffQPController:
 
             if self.count == self.n_col - 2 and thread.ti != 0 and not self.sent:
                 # self.x_pred = self.planner.predict(q, v, self.x_des)
-                self.parent_conn.send((q, v, self.x_des, image))
+                
+                if not self.vicon_name or self.run_sim:
+                    x_des = x_des_arr[1] 
+                    x_des[1] = 0.5*np.sin(0.0005*thread.ti)
+                    x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.5
+                else:
+                    x_des = self.get_cube_pos(thread)
+                    self.image = self.get_rgbd(thread)
+
+                self.update_desired_position(x_des)
+
+                self.parent_conn.send((q, v, self.x_des, self.image))
                 self.sent = True
                 # print("computing...")
+            
             if self.parent_conn.poll():
                 self.x_pred = self.parent_conn.recv()
                 self.count = -1
@@ -200,8 +204,9 @@ class DiffQPController:
         self.tau_in = tau_total
         self.index += 1
         t2 = time.time()
-
+    
         self.time = t2 - t1
+        # print(self.time)
         # for plotting
         pin.forwardKinematics(self.pinModel, self.pinData, q, v, np.zeros_like(q))
         pin.updateFramePlacements(self.pinModel, self.pinData)

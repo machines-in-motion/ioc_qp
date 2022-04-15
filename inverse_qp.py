@@ -12,7 +12,6 @@ from inverse_kinematics import InverseKinematics
 from diff_qp import DiffQP
 from torchvision.transforms import ToTensor, ToPILImage
 
-
 class IOC(torch.nn.Module):
     
     def __init__(self, n : int, nq : int, tau_lim : list, dt : float = 0.05, eps : float = 0.1, isvec = False):
@@ -98,12 +97,11 @@ class IOCForwardPass:
         self.std = std
         self.n_vars = self.ioc.n_vars
         self.nn = Net(2*self.nq + 3, 2*self.n_vars)
-        self.nn.load_state_dict(torch.load(nn_dir))
+        self.nn.load_state_dict(torch.load(nn_dir, map_location=torch.device('cpu')))
         
         if cnn_dir:
             self.cnet = C_Net()
-            self.cnet.load_state_dict(torch.load(cnn_dir))
-
+            self.cnet.load_state_dict(torch.load(cnn_dir, map_location=torch.device('cpu')))
 
     def predict(self, q, dq, x_des):
 
@@ -127,24 +125,26 @@ class IOCForwardPass:
         x_pred = x_pred.detach().numpy()
 
         return x_pred
-    
+
     def cnn_predict(self, image):
         image = ToTensor()(image.astype(np.float))[None,:,:,:].float()
         pred = self.cnet(image)
 
-        return pred
+        return pred.detach().numpy()
 
     def predict_rt(self, child_conn):
         while True:
             q, dq, x_des, image = child_conn.recv()
             t1 = time.time()
             if isinstance(image, np.ndarray):
+                # print("predecting..")
                 c_pred = self.cnn_predict(image)
-            # print(image.shape)
+                print(c_pred, x_des, np.linalg.norm(c_pred - x_des))
+            
             x_pred = self.predict(q, dq, x_des)
             t2 = time.time()
             child_conn.send((x_pred))
-            print("compute time", t2 - t1)
+            # print("compute time", t2 - t1)
 
 
 def subprocess_mpc_entry(channel, nn_dir, mean, std, cnn_dir):
