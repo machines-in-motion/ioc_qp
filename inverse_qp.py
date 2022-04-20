@@ -1,20 +1,17 @@
 ## This class usses diff qp to compute the weights (IOC)
 ## Author : Avadesh Meduri
 ## Date : 22/02/2022
+from gc import collect
 import time
 import numpy as np
-from pandas import isna
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from dynamic_graph_head import ImageLogger, VisionSensor
+from multiprocessing import Process, Pipe
 
 from inverse_kinematics import InverseKinematics
 from diff_qp import DiffQP
-from torchvision.transforms import ToTensor, ToPILImage
-from dynamic_graph_head import ImageLogger 
-
-from multiprocessing import Process, Pipe
-
 
 class IOC(torch.nn.Module):
     
@@ -55,7 +52,7 @@ class IOC(torch.nn.Module):
             self.weight = torch.nn.Parameter(torch.tril(torch.rand((self.n_vars, self.n_vars), dtype = torch.float)))
         
         self.x_nom = torch.nn.Parameter(0.005*torch.ones(self.n_vars, dtype = torch.float))
-
+    
 
     def forward(self, x_init):
 
@@ -79,14 +76,14 @@ class IOC(torch.nn.Module):
 
 class IOCForwardPass:
 
-    def __init__(self, nn_dir, m, std, cnn_dir = None):
+    def __init__(self, nn_dir, m, std, collect_data = True):
         """
         Input:
             nn_dir : directory for NN weights
             ioc : ioc QP
             m : mean of the trained data (y_train)
             std : standard deviation of trained data (y_train)
-            cnn_dir : directory of cnn weights
+            collect_data : collects data
         """
 
         self.nq = 7
@@ -101,19 +98,17 @@ class IOCForwardPass:
         self.std = std
         self.n_vars = self.ioc.n_vars
         self.nn = Net(2*self.nq + 3, 2*self.n_vars)
-        self.nn.load_state_dict(torch.load(nn_dir, map_location=torch.device('cpu')))
-        
-        if cnn_dir:
-            self.cnet = C_Net()
-            self.cnet.load_state_dict(torch.load(cnn_dir, map_location=torch.device('cpu')))
+        self.nn.load_state_dict(torch.load(nn_dir))
 
-        # for data recording
-        self.img_par, self.img_child = Pipe()
-        self.data = {"color_image": [], "depth_image": [], "position": []}
-        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data4", 0.1, \
-                    self.img_child))
-        self.subp.start()
-        self.ti = 0
+        self.camera = VisionSensor()
+        self.camera.update(None)
+        self.collect_data = collect_data
+        if self.collect_data:
+            self.data = {"color_image": [], "depth_image": [], "position": []}
+            self.img_par, self.img_child = Pipe()
+            self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data6", 1.5, self.img_child))
+            self.subp.start()
+            self.ctr = 0
 
     def predict(self, q, dq, x_des):
 
@@ -137,36 +132,28 @@ class IOCForwardPass:
         x_pred = x_pred.detach().numpy()
 
         return x_pred
-
-    def cnn_predict(self, image):
-        image = ToTensor()(image.astype(np.float))[None,:,:,:].float()
-        pred = self.cnet(image)
-
-        return pred.detach().numpy()
-
+    
     def predict_rt(self, child_conn):
         while True:
-            q, dq, x_des, image = child_conn.recv()
-            t1 = time.time()
-            if isinstance(image, np.ndarray):
-                # print("predecting..")
-                # c_pred = self.cnn_predict(image)
-                # print(c_pred, x_des, np.linalg.norm(c_pred - x_des))
-                
-                self.data["color_image"] = image[:,:,:3]
-                self.data["depth_image"] = image[:,:,3]
-                self.data["position"] = x_des
-                self.img_par.send((self.data, self.ti))
-                self.ti += 1
+            q, dq, x_des = child_conn.recv()
 
+            if self.collect_data:
+                self.color_image, self.depth_image = self.camera.get_image()
+                self.data["color_image"] = self.color_image
+                self.data["depth_image"] = self.depth_image
+                self.data["position"] = x_des
+                self.img_par.send((self.data, self.ctr))
+                self.ctr += 1
+
+            t1 = time.time()
             x_pred = self.predict(q, dq, x_des)
             t2 = time.time()
             child_conn.send((x_pred))
             # print("compute time", t2 - t1)
 
 
-def subprocess_mpc_entry(channel, nn_dir, mean, std, cnn_dir):
-    planner = IOCForwardPass(nn_dir, mean, std, cnn_dir)
+def subprocess_mpc_entry(channel, nn_dir, mean, std):
+    planner = IOCForwardPass(nn_dir, mean, std)
     planner.predict_rt(channel)
 
 class Net(torch.nn.Module):
@@ -182,24 +169,4 @@ class Net(torch.nn.Module):
         x = torch.tanh(self.fc1(x))
         x = torch.tanh(self.fc2(x))
         x = self.out(x)
-        return x
-
-class C_Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(4, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(293904, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 3)
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
-#         print(x.shape)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
         return x

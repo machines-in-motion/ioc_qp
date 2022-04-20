@@ -33,8 +33,9 @@ class ConstantTorque:
         self.data = {"color_image": [], "depth_image": [], "position": []}
 
     def warmup(self, thread_head):
-        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data3", 5.0, self.child_conn))
+        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data10", 5.0, self.child_conn))
         self.subp.start()
+        self.init = self.joint_positions.copy()
 
         pass
 
@@ -49,11 +50,17 @@ class ConstantTorque:
         self.data["position"] = pos[0:3]
         self.parent_conn.send((self.data, thread.ti))
 
-        cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-        cv2.imshow('RealSense', self.color_image)
-        cv2.waitKey(1)
-
-        self.tau = np.zeros(7)
+        # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+        # cv2.imshow('RealSense', self.color_image)
+        # cv2.waitKey(1)
+        ti = thread.ti
+        self.des_position = self.init.copy()
+        self.des_position[0] += 0.2*np.sin(0.001*np.pi*ti)
+        self.des_position[1] += 0.2*np.sin(0.001*np.pi*ti)
+        self.tau = (
+            40 * (self.des_position - self.joint_positions)
+            - 0.5 * self.joint_velocities
+        )
         pin.forwardKinematics(self.pinModel, self.pinData, q, v, np.zeros_like(q))
         pin.updateFramePlacements(self.pinModel, self.pinData)
         
