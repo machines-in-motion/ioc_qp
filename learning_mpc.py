@@ -50,12 +50,8 @@ n_vars = 3*nq*n_col + 2*nq
 m = torch.load("./data/mean.pt")
 std = torch.load("./data/std.pt")
 
-# loading model
-nn = Net(2*nq + 3, 2*n_vars)
-nn.load_state_dict(torch.load("./models/test1"))
-
 # loading forward pass class
-iocfp = IOCForwardPass(nn, ioc, m, std)
+iocfp = IOCForwardPass("./models/test2", m, std)
 
 x_des_arr = np.array([[0.5, -0.4, 0.4], [0.6, 0.4, 0.7], [0.3, -0.4, 0.6], [0.2, 0.6, 0.1]])
 
@@ -115,7 +111,7 @@ for v in range(nb_switches*n_col*eps) :
         else:
             robot.plan.append(0)
         robot.send_id_command(q_int[i], dq_int[i], a_int[i])
-        # time.sleep(0.0005)
+        time.sleep(0.0005)
 
 robot.plot()
 # robot.robot.stop_recording("./test.mp4")

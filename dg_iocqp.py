@@ -171,6 +171,7 @@ class DiffQPController:
         t2 = time.time()
 
         self.time = t2 - t1
+        # print(self.time)
         # for plotting
         pin.forwardKinematics(self.pinModel, self.pinData, q, v, np.zeros_like(q))
         pin.updateFramePlacements(self.pinModel, self.pinData)
