@@ -1,11 +1,14 @@
 ## This class usses diff qp to compute the weights (IOC)
 ## Author : Avadesh Meduri
 ## Date : 22/02/2022
+from gc import collect
 import time
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from dynamic_graph_head import ImageLogger, VisionSensor
+from multiprocessing import Process, Pipe
 
 from inverse_kinematics import InverseKinematics
 from diff_qp import DiffQP
@@ -73,13 +76,14 @@ class IOC(torch.nn.Module):
 
 class IOCForwardPass:
 
-    def __init__(self, nn_dir, m, std):
+    def __init__(self, nn_dir, m, std, collect_data = True):
         """
         Input:
             nn_dir : directory for NN weights
             ioc : ioc QP
             m : mean of the trained data (y_train)
             std : standard deviation of trained data (y_train)
+            collect_data : collects data
         """
 
         self.nq = 7
@@ -95,6 +99,16 @@ class IOCForwardPass:
         self.n_vars = self.ioc.n_vars
         self.nn = Net(2*self.nq + 3, 2*self.n_vars)
         self.nn.load_state_dict(torch.load(nn_dir))
+
+        self.camera = VisionSensor()
+        self.camera.update(None)
+        self.collect_data = collect_data
+        if self.collect_data:
+            self.data = {"color_image": [], "depth_image": [], "position": []}
+            self.img_par, self.img_child = Pipe()
+            self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data6", 1.5, self.img_child))
+            self.subp.start()
+            self.ctr = 0
 
     def predict(self, q, dq, x_des):
 
@@ -122,6 +136,15 @@ class IOCForwardPass:
     def predict_rt(self, child_conn):
         while True:
             q, dq, x_des = child_conn.recv()
+
+            if self.collect_data:
+                self.color_image, self.depth_image = self.camera.get_image()
+                self.data["color_image"] = self.color_image
+                self.data["depth_image"] = self.depth_image
+                self.data["position"] = x_des
+                self.img_par.send((self.data, self.ctr))
+                self.ctr += 1
+
             t1 = time.time()
             x_pred = self.predict(q, dq, x_des)
             t2 = time.time()

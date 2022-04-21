@@ -133,3 +133,14 @@ data/
 models/
 *.mp4
 extern/
+*.png
+*.npz
+=======
+
+# mypy
+.directory
+
+./vision/image_data
+*.avi
+*.jpg
+*.png
