@@ -6,7 +6,7 @@ from dynamic_graph_head import ThreadHead, Vicon, SimHead, HoldPDController
 
 import time
 
-# import dynamic_graph_manager_cpp_bindings
+import dynamic_graph_manager_cpp_bindings
 from robot_properties_kuka.config import IiwaConfig
 from robot_properties_kuka.iiwaWrapper import IiwaRobot
 from bullet_utils.env import BulletEnvWithGround
@@ -15,21 +15,12 @@ from mim_data_utils import DataLogger, DataReader
 
 run_sim = False
 
-<<<<<<< HEAD
 # x_des_arr = np.array([[0.5, -0.5, 0.4], [0.5, 0.4, 0.6], [0.4, -0.4, 0.4], [0.7, 0.4, 0.5]])
 # x_des = x_des_arr[1]
-x_train = torch.load("./data/x_train.pt")
+x_train = torch.load("./data/x_train1.pt")
 i = np.random.randint(len(x_train))
 x_des = x_train[i][-3:].detach().numpy()
-=======
-x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])
-x_des = x_des_arr[1]
 
-x_train = torch.load("./data/x_train1.pt")
-i = 0
-# x_des = x_train[i][-3:].detach().numpy()
-
->>>>>>> 048295cbc4bb899eb2dc591a42829e2a10147209
 if run_sim:
     env = BulletEnvWithGround(p.GUI)
 
