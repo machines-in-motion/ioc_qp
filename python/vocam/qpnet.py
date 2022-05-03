@@ -16,7 +16,7 @@ import meshcat.geometry as g
 from tqdm import trange
 import time
 
-class DataGenerator(object):
+class DataUtils(object):
     def __init__(self, robot, config, viz=None):
         self.robot = robot
         self.model, self.data = robot.model, robot.data
@@ -171,7 +171,8 @@ class QPNet(nn.Module):
         self.out = nn.Linear(512, output_size)
         
     def forward(self, x):
-        
+        if len(x.shape) == 1:
+            x = x[None, :]
         x = self.swish(self.bn1(self.fc1(x)))
         x = self.dropout(self.swish(self.bn2(self.fc2(x)))) 
         x = self.swish(self.bn3(self.fc3(x)))

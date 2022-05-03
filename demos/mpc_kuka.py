@@ -32,25 +32,29 @@ n_col = 5
 u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
 n_vars = 3*nq*n_col+2*nq
 
-# loading mean and std
-m = torch.load("../data/mean.pt")
-std = torch.load("../data/std.pt")
+print(n_vars)
 
 # loading forward pass class
-nn_dir = "../models/test4"
-nn = Net(2*nq + 3, 2*n_vars)
-nn.load_state_dict(torch.load(nn_dir))
+from vocam.qpnet import QPNet
+nn_dir = "../models/test2"
+nn = QPNet(2*nq + 3, 2*n_vars).eval()
+nn.load(nn_dir)
 
 rt = False
 if not rt:
-    iocfp = IOCForwardPassWithoutVision(nn, m, std, u_max)
+    iocfp = IOCForwardPassWithoutVision(nn, u_max=u_max)
 else:
     ## if real time (computation will be done in a parallel thread)
     parent_conn, child_conn = Pipe()
     subp = Process(target=rt_IOCForwardPassWithoutVision, args=(child_conn, nn_dir, m, std, u_max))
     subp.start()
 
-x_train = torch.load("../data/x_train1.pt")
+
+data_train = torch.load("../data/data_train.pt")
+unzipped = list(zip(*data_train))
+x_train = torch.vstack([*unzipped[0]])
+y_train = torch.vstack([*unzipped[1]])
+
 i = 0
 # x_des = x_train[i][-3:].detach().numpy()
 x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])

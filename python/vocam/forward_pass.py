@@ -47,6 +47,8 @@ class IOCForwardPassWithoutVision:
             pred = pred_norm * self.std + self.m
         else:
             pred = pred_norm
+        
+        pred = torch.squeeze(pred)
 
         # # if not self.ioc.isvec:
         #     self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
@@ -55,8 +57,9 @@ class IOCForwardPassWithoutVision:
         self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
         self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
 
-        x_pred = self.ioc(state) 
+        x_pred = self.ioc(state)
         x_pred = x_pred.detach().numpy()
+
 
         return x_pred
 
