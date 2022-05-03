@@ -2,12 +2,15 @@
 ## Author : Avadesh Meduri
 ## Date : 21/03/2022
 
+import sys
+sys.path.append("/home/ameduri/pydevel/ioc_qp/")
+
 import numpy as np
 import pinocchio as pin
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
-from inverse_qp import IOC, IOCForwardPass, subprocess_mpc_entry
+from python.vocam.vocam_forward_pass import IOCForwardPass, rt_IOCForwardPass
 from multiprocessing import Process, Pipe
 import scipy.signal as signal
 from scipy.signal import butter, lfilter
@@ -87,7 +90,7 @@ class DiffQPController:
 
         # self.x_pred = self.planner.predict(self.joint_positions, self.joint_velocities, self.x_des)
 
-        self.subp = Process(target=subprocess_mpc_entry, args=(self.child_conn, self.nn_dir, self.m, self.std))
+        self.subp = Process(target=rt_IOCForwardPass, args=(self.child_conn, self.nn_dir, self.m, self.std))
         self.subp.start()
 
         q = self.joint_positions

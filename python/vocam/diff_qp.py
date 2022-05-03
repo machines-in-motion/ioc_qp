@@ -2,13 +2,12 @@
 ## Author : Avadesh Meduri
 ## Date : 15/02/2022
 
-import numba
 import numpy as np
 
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
-from solver import quadprog_solve_qp
+from . solver import quadprog_solve_qp
 
 import time
 

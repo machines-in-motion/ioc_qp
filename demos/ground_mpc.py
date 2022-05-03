@@ -4,7 +4,7 @@
 
 from calendar import c
 import numpy as np
-from kuka_bullet_env import KukaBulletEnv
+from python.env.kuka_bullet_env import KukaBulletEnv
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
