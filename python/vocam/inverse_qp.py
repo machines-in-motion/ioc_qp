@@ -13,9 +13,9 @@ import cv2
 from multiprocessing import Process, Pipe
 from skimage.io import imread
 
-from . inverse_kinematics import InverseKinematics
-from . diff_qp import DiffQP
-from . nets import C_Net, Net
+from vocam.inverse_kinematics import InverseKinematics
+from vocam.diff_qp import DiffQP
+from vocam.nets import C_Net, Net
 
 
 

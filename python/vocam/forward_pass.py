@@ -7,15 +7,15 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from .nets import Net
-from .inverse_qp import IOC
+from vocam.nets import Net
+from vocam.inverse_qp import IOC
 
 class IOCForwardPassWithoutVision:
 
-    def __init__(self, nn_dir, m, std, u_max =  [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]):
+    def __init__(self, nn, m = None, std = None, u_max =  [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]):
         """
         Input:
-            nn_dir : directory for NN weights
+            nn : nn class
             ioc : ioc QP
             m : mean of the trained data (y_train)
             std : standard deviation of trained data (y_train)
@@ -32,8 +32,7 @@ class IOCForwardPassWithoutVision:
         self.m = m
         self.std = std
         self.n_vars = self.ioc.n_vars
-        self.nn = Net(2*self.nq + 3, 2*self.n_vars)
-        self.nn.load_state_dict(torch.load(nn_dir))
+        self.nn = nn
         
     def predict(self, q, dq, x_des):
 
@@ -44,7 +43,10 @@ class IOCForwardPassWithoutVision:
         state[nq:] = dq
         x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des))).float()
         pred_norm = self.nn(x_input)
-        pred = pred_norm * self.std + self.m
+        if torch.is_tensor(self.std):
+            pred = pred_norm * self.std + self.m
+        else:
+            pred = pred_norm
 
         # # if not self.ioc.isvec:
         #     self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))

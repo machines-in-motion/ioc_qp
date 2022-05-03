@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
-from . solver import quadprog_solve_qp
+from vocam.solver import quadprog_solve_qp
 
 import time
 

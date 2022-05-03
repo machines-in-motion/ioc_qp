@@ -1,16 +1,17 @@
 ## This file contains the ioc qp setup wrapped with dynamic graph head
 ## Author : Avadesh Meduri
 ## Date : 21/03/2022
-
-import sys
-sys.path.append("/home/ameduri/pydevel/ioc_qp/")
+import pathlib
+import os
+python_path = pathlib.Path('.').absolute().parent/'python'
+os.sys.path.insert(1, str(python_path))
 
 import numpy as np
 import pinocchio as pin
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
-from python.vocam.vocam_forward_pass import IOCForwardPass, rt_IOCForwardPass
+from vocam.vocam_forward_pass import IOCForwardPass, rt_IOCForwardPass
 from multiprocessing import Process, Pipe
 import scipy.signal as signal
 from scipy.signal import butter, lfilter

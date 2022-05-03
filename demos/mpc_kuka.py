@@ -2,15 +2,18 @@
 ## Author : Avadesh Meduri
 ## Date : 1/03/2022
 
-import sys
-sys.path.append("/home/ameduri/pydevel/ioc_qp/")
+import pathlib
+import os
+python_path = pathlib.Path('.').absolute().parent/'python'
+os.sys.path.insert(1, str(python_path))
 
 import numpy as np
 import torch
 from torch.nn import functional as F
 
-from python.vocam.forward_pass import IOCForwardPassWithoutVision, rt_IOCForwardPassWithoutVision
-from python.env.kuka_bullet_env import KukaBulletEnv
+from vocam.forward_pass import IOCForwardPassWithoutVision, rt_IOCForwardPassWithoutVision
+from vocam.nets import Net
+from env.kuka_bullet_env import KukaBulletEnv
 
 import pybullet as p
 from robot_properties_kuka.config import IiwaConfig
@@ -27,6 +30,7 @@ nq = 7
 dt = 0.05
 n_col = 5
 u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
+n_vars = 3*nq*n_col+2*nq
 
 # loading mean and std
 m = torch.load("../data/mean.pt")
@@ -34,9 +38,12 @@ std = torch.load("../data/std.pt")
 
 # loading forward pass class
 nn_dir = "../models/test4"
+nn = Net(2*nq + 3, 2*n_vars)
+nn.load_state_dict(torch.load(nn_dir))
+
 rt = False
 if not rt:
-    iocfp = IOCForwardPassWithoutVision(nn_dir, m, std, u_max)
+    iocfp = IOCForwardPassWithoutVision(nn, m, std, u_max)
 else:
     ## if real time (computation will be done in a parallel thread)
     parent_conn, child_conn = Pipe()

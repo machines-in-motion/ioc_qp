@@ -1,3 +1,9 @@
+
+import pathlib
+import os
+python_path = pathlib.Path('.').absolute().parent/'python'
+os.sys.path.insert(1, str(python_path))
+
 import torch
 from dg_iocqp import DiffQPController
 import pybullet as p

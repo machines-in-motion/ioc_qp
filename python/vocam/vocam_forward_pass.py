@@ -13,9 +13,9 @@ import cv2
 from multiprocessing import Process, Pipe
 from skimage.io import imread
 
-from . diff_qp import DiffQP
-from . nets import C_Net, Net
-from . inverse_qp import IOC
+from vocam.diff_qp import DiffQP
+from vocam.nets import C_Net, Net
+from vocam.inverse_qp import IOC
 
 try:
     from dynamic_graph_head import ImageLogger, VisionSensor
