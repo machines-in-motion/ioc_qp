@@ -1,4 +1,3 @@
-
 import pathlib
 import os
 python_path = pathlib.Path('.').absolute().parent/'python'
@@ -11,6 +10,7 @@ import numpy as np
 from dynamic_graph_head import ThreadHead, Vicon, SimHead, HoldPDController
 
 import time
+# from vocam.nets import Net
 
 import dynamic_graph_manager_cpp_bindings
 from robot_properties_kuka.config import IiwaConfig
@@ -59,32 +59,31 @@ pin_robot = IiwaConfig.buildRobotWrapper()
 # loading mean and std
 m = torch.load("../data/mean.pt")
 std = torch.load("../data/std.pt")
+nq = 7
+n_col = 5
+n_vars = 3*nq*n_col+2*nq
 
-ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, "../models/test4", m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
+nn_dir = "../models/test4"
+# nn = Net(2*nq + 3, 2*n_vars)
+# nn.load_state_dict(torch.load(nn_dir))  
+
+ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, nn_dir, m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
 ctrl.update_desired_position(x_des)
 if not run_sim:
     kp = np.array([250.0, 250.0, 250.0, 250.0, 180.0, 30.0, 30.0])
     kd = np.array([15.0, 15.0, 18.0, 18.0, 18.0, 5.0, 5.0])
     ctrl.set_gains(kp, kd)
-    thread_head = ThreadHead(
-        0.001, # dt.
-        HoldPDController(head, 50., 0.5, with_sliders=False), # Safety controllers.
-        head, # Heads to read / write from.
-        [('vicon', Vicon('172.24.117.119:801', ['cube10/cube10']))
-        ], 
-        env # Environment to step.
-    )
+   
 else:
     ctrl.set_gains(1.0, 0.05)
-    thread_head = ThreadHead(
-        0.001, # dt.
-        HoldPDController(head, 50., 0.5, with_sliders=False), # Safety controllers.
-        head, # Heads to read / write from.
-        [('vicon', Vicon('172.24.117.119:801', ['cube10/cube10']))
-        ], 
-        env # Environment to step.
-    )
-
+thread_head = ThreadHead(
+    0.001, # dt.
+    HoldPDController(head, 50., 0.5, with_sliders=False), # Safety controllers.
+    head, # Heads to read / write from.
+    [('vicon', Vicon('172.24.117.119:801', ['cube10/cube10']))
+    ], 
+    env # Environment to step.
+)
 
 
 thread_head.switch_controllers(ctrl)
@@ -96,3 +95,4 @@ if run_sim:
 else:
     thread_head.start()
     # thread_head.start_logging(15, "test.mds")
+

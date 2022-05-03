@@ -131,5 +131,3 @@ class IOCForwardPass:
 def rt_IOCForwardPass(channel, nn_dir, mean, std):
     planner = IOCForwardPass(nn_dir, mean, std)
     planner.predict_rt(channel)
-
-
