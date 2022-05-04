@@ -21,7 +21,8 @@ class DataUtils(object):
         self.viz = viz
         self.task_loss = task_loss
 
-    def generate(self, n_samples):
+    def generate(self, n_tasks):
+        n_samples = n_tasks * self.config.task_horizon
         self.x_train_init = torch.zeros((n_samples, len(self.config.x_init)))
         self.x_train_des = torch.zeros((n_samples, 3))
 
@@ -40,7 +41,7 @@ class DataUtils(object):
             ioc = IOC(n_col, nq, u_max, dt, eps=1.0, isvec=self.config.isvec)
             optimizer = torch.optim.Adam(ioc.parameters(), lr=self.config.lr_qp)
 
-            if k % 32 == 0:
+            if k % self.config.task_horizon == 0:
                 x_init = np.zeros(2 * nq)
                 if k < 1:
                     x_des = torch.tensor([0.6, 0.4, 0.7])
@@ -60,7 +61,7 @@ class DataUtils(object):
                                     reflectivity=0.8))
                     self.viz.viewer["box"].set_transform(tf.translation_matrix(x_des.detach().numpy()))
             else:
-                x_init = x_pred[-2*nq:]
+                x_init = x_pred[-2 * nq:]
 
             self.x_train_init[k] = torch.tensor(x_init)
             self.x_train_des[k] = x_des
@@ -75,13 +76,13 @@ class DataUtils(object):
                 x_pred = ioc(x_init) 
                 old_loss = loss
                 loss = self.task_loss(self.robot, x_pred, x_des, nq, n_col)
-        #         print("Index :" + str(k) + "/" + str(n_samples) + " Iteration :" + str(i) + "/" + str(max_it) +  " loss is : " + str(loss.detach().numpy()), end = '\r', flush = True)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 i += 1
             
             x_pred = ioc(x_init).detach().numpy()
+            
             if self.viz is not None:
                 for i in range(n_col+1):
                     q = x_pred[3*nq*i:3*nq*i + nq]
