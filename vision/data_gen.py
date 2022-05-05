@@ -81,7 +81,7 @@ class ConstantTorque:
         self.data = {"color_image": [], "depth_image": [], "position": []}
         
         self.cnet = C_Net()
-        self.cnet.load_state_dict(torch.load("./models/cnn3"))
+        self.cnet.load_state_dict(torch.load("./models/cnn3", map_location=torch.device('cpu')))
         self.mean = np.array([0.3186, 0.0425, 0.2636])
         self.std = np.array([0.1430, 0.1926, 0.1375])
 
@@ -96,8 +96,8 @@ class ConstantTorque:
     def predict_cnn(self):
         with torch.no_grad():
         
-            c_image = ToTensor()((imread("image_data/" + "/color_" + str(1) + ".jpg")))
-            d_image = ToTensor()((imread("image_data/" + "/depth_" + str(1) + ".jpg")))
+            c_image = ToTensor()((imread("image_data/" + "color_" + str(1) + ".jpg")))
+            d_image = ToTensor()((imread("image_data/" + "depth_" + str(1) + ".jpg")))
             image = torch.vstack((c_image, d_image))
             image = transforms.functional.crop(image, 0, 100, 150, 150)
             image = image[None,:,:,:]
@@ -112,10 +112,10 @@ class ConstantTorque:
         v = self.joint_velocities
         pos, vel = thread.vicon.get_state('cube10/cube10')
         self.color_image, self.depth_image = thread.camera.get_image()
-        cv2.imwrite("image_data/" + "/color_" + str(1) + ".jpg", self.color_image)
-        cv2.imwrite("image_data/" + "/depth_" + str(1) + ".jpg", self.depth_image)
+        cv2.imwrite("./image_data/" + "color_" + str(1) + ".jpg", self.color_image)
+        cv2.imwrite("./image_data/" + "depth_" + str(1) + ".jpg", self.depth_image)
 
-        pred = self.predict_cnn(self.color_image, self.depth_image)
+        pred = self.predict_cnn()
         print(pred, pos[0:3], np.linalg.norm(pred - pos[0:3]))
         
         # self.data["color_image"] = self.color_image
@@ -127,8 +127,9 @@ class ConstantTorque:
         opencvImage = cv2.cvtColor(np.array(box), cv2.COLOR_RGB2BGR)
 
         cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-        cv2.imshow('RealSense', opencvImage)
+        cv2.imshow('RealSense', self.color_image)
         cv2.waitKey(1)
+
         ti = thread.ti
         self.des_position = self.init.copy()
         self.des_position[0] += 0.2*np.sin(0.001*np.pi*ti)

@@ -2,6 +2,7 @@
 ## Author : Avadesh Meduri
 ## Date : 3/05/2022 
 
+from csv import excel_tab
 import time
 import numpy as np
 import torch
@@ -16,6 +17,7 @@ from skimage.io import imread
 from vocam.diff_qp import DiffQP
 from vocam.nets import C_Net, Net
 from vocam.inverse_qp import IOC
+from vocam.qpnet import QPNet
 
 try:
     from dynamic_graph_head import ImageLogger, VisionSensor
@@ -43,11 +45,19 @@ class IOCForwardPass:
         self.dt = 0.05
 
         self.ioc = IOC(self.n_col, self.nq, u_max, self.dt, eps = 1.0, isvec=True)
-        self.m = m
+        self.mean = m
         self.std = std
         self.n_vars = self.ioc.n_vars
-        self.nn = Net(2*self.nq + 3, 2*self.n_vars)
-        self.nn.load_state_dict(torch.load(nn_dir))
+        try:
+            self.nn = Net(2*self.nq + 3, 2*self.n_vars)
+            self.nn.load_state_dict(torch.load(nn_dir))
+            self.no_norm = False
+            print("using nn")
+        except:
+            print("using qp net")
+            self.nn = QPNet(2*self.nq + 3, 2*self.n_vars).eval()
+            self.nn.load(nn_dir)
+            self.no_norm = True
 
         self.vision_based = vision_based
         if self.vision_based:
@@ -73,10 +83,14 @@ class IOCForwardPass:
         state = np.zeros(2*nq)
         state[0:nq] = q
         state[nq:] = dq
-
         x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des))).float()
-        pred_norm = self.nn(x_input)
-        pred = pred_norm * self.std + self.m
+        if not self.no_norm:
+            pred_norm = self.nn(x_input)
+            # print(pred.shape, self.std.shape, self.m.shape)
+            pred = pred_norm * self.std + self.mean
+        else:
+            pred_norm = torch.squeeze(self.nn(x_input))
+            pred = pred_norm
         # # if not self.ioc.isvec:
         #     self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
         #     self.ioc.x_nom = torch.nn.Parameter(pred[n_vars**2:])
@@ -103,23 +117,23 @@ class IOCForwardPass:
         while True:
             q, dq, x_des = child_conn.recv()
 
-            if self.collect_data:
-                self.color_image, self.depth_image = self.camera.get_image()
-                self.data["color_image"] = self.color_image
-                self.data["depth_image"] = self.depth_image
-                self.data["position"] = x_des
-                self.img_par.send((self.data, self.ctr))
-                self.ctr += 1
+            # if self.collect_data:
+            #     self.color_image, self.depth_image = self.camera.get_image()
+            #     self.data["color_image"] = self.color_image
+            #     self.data["depth_image"] = self.depth_image
+            #     self.data["position"] = x_des
+            #     self.img_par.send((self.data, self.ctr))
+            #     self.ctr += 1
 
-            if self.vision_based:
-                self.color_image, self.depth_image = self.camera.get_image()
-                cv2.imwrite("." + "/color_" + str(1) + ".jpg", self.color_image)
-                cv2.imwrite("." + "/depth_" + str(1) + ".jpg", self.depth_image)
+            # if self.vision_based:
+            #     self.color_image, self.depth_image = self.camera.get_image()
+            #     cv2.imwrite("." + "/color_" + str(1) + ".jpg", self.color_image)
+            #     cv2.imwrite("." + "/depth_" + str(1) + ".jpg", self.depth_image)
 
-                pred = self.predict_cnn()
-                pred[2] -= 0.15
-                pred[0] += 0.1
-                print(pred, x_des, np.linalg.norm(pred - x_des))
+            #     pred = self.predict_cnn()
+            #     pred[2] -= 0.15
+            #     pred[0] += 0.1
+            #     print(pred, x_des, np.linalg.norm(pred - x_des))
 
             t1 = time.time()
             x_pred = self.predict(q, dq, x_des)

@@ -10,7 +10,7 @@ import numpy as np
 from dynamic_graph_head import ThreadHead, Vicon, SimHead, HoldPDController
 
 import time
-# from vocam.nets import Net
+from vocam.nets import Net
 
 import dynamic_graph_manager_cpp_bindings
 from robot_properties_kuka.config import IiwaConfig
@@ -63,15 +63,16 @@ nq = 7
 n_col = 5
 n_vars = 3*nq*n_col+2*nq
 
-nn_dir = "../models/test4"
-# nn = Net(2*nq + 3, 2*n_vars)
-# nn.load_state_dict(torch.load(nn_dir))  
+# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet"
+nn_dir = "/home/ameduri/pydevel/ioc_qp/models/test4"
 
 ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, nn_dir, m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
 ctrl.update_desired_position(x_des)
 if not run_sim:
-    kp = np.array([250.0, 250.0, 250.0, 250.0, 180.0, 30.0, 30.0])
-    kd = np.array([15.0, 15.0, 18.0, 18.0, 18.0, 5.0, 5.0])
+    # kp = np.array([250.0, 250.0, 250.0, 250.0, 180.0, 30.0, 30.0])
+    # kd = np.array([15.0, 15.0, 18.0, 18.0, 18.0, 5.0, 5.0])
+    kp = np.array([80.0, 80.0, 80.0, 80.0, 60.0, 10.0, 10.0])
+    kd = np.array([8.0, 8.0, 8.0, 8.0, 8.0, 3.0, 3.0])
     ctrl.set_gains(kp, kd)
    
 else:
@@ -94,5 +95,5 @@ if run_sim:
 
 else:
     thread_head.start()
-    # thread_head.start_logging(15, "test.mds")
+    thread_head.start_logging(3, "test.mds")
 

@@ -141,10 +141,13 @@ class DiffQPController:
 
         if not self.vicon_name or self.run_sim:
             x_des = x_des_arr[1] 
-            x_des[1] = 0.5*np.sin(0.0005*thread.ti)
-            x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.5
+            x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
+            x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.3
         else:
-            x_des = self.get_cube_pos(thread)
+            x_des = x_des_arr[1] 
+            x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
+            x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.3
+            # x_des = self.get_cube_pos(thread)
         
         self.update_desired_position(x_des)
         
