@@ -1,11 +1,7 @@
 
 import torch
 import torch.nn as nn
-from torch.autograd import Function
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
 
-from vocam.diff_pin_costs import DiffFrameTranslationCost, DiffFrameVelocityCost
 from vocam.inverse_qp import IOC
 
 import pinocchio as pin
@@ -17,34 +13,35 @@ from tqdm import trange
 import time
 
 class DataUtils(object):
-    def __init__(self, robot, config, viz=None):
+    def __init__(self, robot, task_loss, config, viz=None):
         self.robot = robot
         self.model, self.data = robot.model, robot.data
         self.f_id = self.model.getFrameId("EE")
         self.config = config
-        self.viz = viz        
+        self.viz = viz
+        self.task_loss = task_loss
 
-
-    def generate(self, buffer_size):
-        self.x_train_init = torch.zeros((buffer_size, len(self.config.x_init)))
-        self.x_train_des = torch.zeros((buffer_size, 3))
+    def generate(self, n_tasks):
+        n_samples = n_tasks * self.config.task_horizon
+        self.x_train_init = torch.zeros((n_samples, len(self.config.x_init)))
+        self.x_train_des = torch.zeros((n_samples, 3))
 
         if not self.config.isvec:
-            self.y_train = torch.zeros((buffer_size, 
+            self.y_train = torch.zeros((n_samples, 
                                         self.config.n_vars**2 + self.config.n_vars))
         else:
-            self.y_train = torch.zeros((buffer_size, 
+            self.y_train = torch.zeros((n_samples, 
                                         2*self.config.n_vars))
 
         all_x_des = []
         n_col, nq, nv = self.config.n_col, self.config.nq, self.config.nv
         u_max, dt = self.config.u_max, self.config.dt
 
-        for k in trange(buffer_size):
+        for k in trange(n_samples):
             ioc = IOC(n_col, nq, u_max, dt, eps=1.0, isvec=self.config.isvec)
             optimizer = torch.optim.Adam(ioc.parameters(), lr=self.config.lr_qp)
 
-            if k % 32 == 0:
+            if k % self.config.task_horizon == 0:
                 x_init = np.zeros(2 * nq)
                 if k < 1:
                     x_des = torch.tensor([0.6, 0.4, 0.7])
@@ -64,7 +61,7 @@ class DataUtils(object):
                                     reflectivity=0.8))
                     self.viz.viewer["box"].set_transform(tf.translation_matrix(x_des.detach().numpy()))
             else:
-                x_init = x_pred[-2*nq:]
+                x_init = x_pred[-2 * nq:]
 
             self.x_train_init[k] = torch.tensor(x_init)
             self.x_train_des[k] = x_des
@@ -73,17 +70,19 @@ class DataUtils(object):
             loss = 1000.
             old_loss = 10000.
             
-            while loss > 0.03 and i < self.config.max_eps and abs(old_loss - loss) > 5e-4:
+            while (loss > self.config.loss_threshold and 
+                   i < self.config.max_it and 
+                   abs(old_loss - loss) > self.config.loss_convergence):
                 x_pred = ioc(x_init) 
                 old_loss = loss
-                loss = self.task_loss(x_pred, x_des, nq, n_col)
-        #         print("Index :" + str(k) + "/" + str(buffer_size) + " Iteration :" + str(i) + "/" + str(max_eps) +  " loss is : " + str(loss.detach().numpy()), end = '\r', flush = True)
+                loss = self.task_loss(self.robot, x_pred, x_des, nq, n_col)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 i += 1
             
             x_pred = ioc(x_init).detach().numpy()
+            
             if self.viz is not None:
                 for i in range(n_col+1):
                     q = x_pred[3*nq*i:3*nq*i + nq]
@@ -100,11 +99,11 @@ class DataUtils(object):
         self.y_train = self.y_train.detach().float()
 
     def sample_next_location(self, curr_location):
-        lb = torch.tensor([0.4,  0.4, 0.0])
-        ub = torch.tensor([1.0,  1.0, 1.1])
-        diff_range = 1.6
-        dist_ub = 0.8
-        dist_lb = 0.4
+        lb = torch.tensor(self.config.lb)
+        ub = torch.tensor(self.config.ub)
+        diff_range = self.config.diff_range
+        dist_ub = self.config.dist_ub
+        dist_lb = self.config.dist_lb
 
         while True:
             diff = diff_range * (torch.rand(3) - 0.5)
@@ -115,31 +114,6 @@ class DataUtils(object):
                 and torch.linalg.norm(next_location) <= dist_ub): 
                 break
         return next_location
-
-    def task_loss(self, q_pred, x_des, nq, n_col):
-        dtc = DiffFrameTranslationCost.apply
-        dvc = DiffFrameVelocityCost.apply
-        model, data, f_id = self.model, self.data, self.f_id
-
-        loss = 3.5e1*torch.linalg.norm(dtc(q_pred[-2*nq:], model, data, f_id) - x_des)
-        loss += 1.5e0*torch.linalg.norm(dvc(q_pred[-2*nq:], torch.zeros(nq), model, data, f_id)) # asking for zero velocity
-        loss += 5e-3*torch.linalg.norm(q_pred[-2*nq:-nq]) # joint regularization
-        
-        for i in range(n_col):    
-            loss += 1e0*torch.linalg.norm(dtc(q_pred[(3*i)*nq: (3*i+2)*nq], model, data, f_id) - x_des)
-            loss += 5e-1*torch.linalg.norm(dvc(q_pred[(3*i)*nq: (3*i+2)*nq], q_pred[(3*i+2)*nq:(3*i+3)*nq], model, data, f_id)) # asking for zero velocity
-            loss += 1e-2*torch.linalg.norm(q_pred[(3*i+2)*nq: (3*i+3)*nq]) # control regularization
-            loss += 2e-1*torch.linalg.norm(q_pred[(3*i+1)*nq: (3*i+2)*nq]) # velocity regularization
-            loss += 3e-3*torch.linalg.norm(q_pred[(3*i)*nq: (3*i+1)*nq]) # joint regularization
-            
-            if i < n_col - 1:
-                loss += 5e-2*torch.linalg.norm(torch.subtract(q_pred[(3*i+2)*nq: (3*i+3)*nq], \
-                                                              q_pred[(3*i+5)*nq: (3*i+6)*nq]))
-            if i == n_col - 1:
-                # terminal joint velocity regularization
-                loss += 2e-1*torch.linalg.norm(q_pred[(3*i+1)*nq: (3*i+2)*nq]) 
-
-        return loss
 
     def save(self, path):
         self.data_train = list(zip(self.x_train, self.y_train))

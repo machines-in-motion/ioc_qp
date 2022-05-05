@@ -143,3 +143,7 @@ extern/
 *.avi
 *.jpg
 *.png
+
+# wandb
+wandb
+artifacts
