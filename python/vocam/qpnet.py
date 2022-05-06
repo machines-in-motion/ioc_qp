@@ -35,6 +35,7 @@ class DataUtils(object):
             if restart:
                 # default goal position
                 x_des = torch.tensor(self.config.default_goal)
+                x_des += self.config.goal_noise * (torch.rand(3) - 0.5)
             else:
                 x_des = self.sample_next_location(x_des.detach())
                 x_init[:nq] = x_pred[-2*nq:-nq]
@@ -119,11 +120,15 @@ class DataUtils(object):
         while True:
             diff = diff_range * (torch.rand(3) - 0.5)
             next_location = curr_location + diff
+            flipped_sign_x = (next_location[0] * curr_location[0] < 0)
+            flipped_sign_y = (next_location[1] * curr_location[1] < 0)
             if (all(torch.abs(next_location) >= lb) 
                 and all(torch.abs(next_location) <= ub)
-                and next_location[-1] >= 0
+                and next_location[-1] >= 0 # height > 0
+                and torch.linalg.norm(diff) <= diff_range / 2
                 and torch.linalg.norm(next_location) >= dist_lb
-                and torch.linalg.norm(next_location) <= dist_ub): 
+                and torch.linalg.norm(next_location) <= dist_ub
+                and (not flipped_sign_x or not flipped_sign_y)): 
                 break
         return next_location
 
