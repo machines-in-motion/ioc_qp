@@ -19,7 +19,7 @@ from scipy.signal import butter, lfilter
 import time
 import pybullet as p
 
-x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])
+x_des_arr = np.array([[0.4, -0.4, 0.7], [0.6, 0.4, 0.5]])
 
 
 def butter_lowpass(highcut, order=2):
@@ -131,18 +131,19 @@ class DiffQPController:
         t1 = time.time()
 
         q = self.joint_positions
-        self.v_fil = self.joint_velocities.copy()
-        for j in range(self.nq):
-            self.v_fil[j], self.filter_vel_z[j] = signal.lfilter(
-                self.filter_vel_b[j], self.filter_vel_a[j],
-                [self.v_fil[j]], zi=self.filter_vel_z[j])
-        v = self.v_fil
-        # v = self.joint_velocities.copy()
+        # self.v_fil = self.joint_velocities.copy()
+        # for j in range(self.nq):
+        #     self.v_fil[j], self.filter_vel_z[j] = signal.lfilter(
+        #         self.filter_vel_b[j], self.filter_vel_a[j],
+        #         [self.v_fil[j]], zi=self.filter_vel_z[j])
+        # v = self.v_fil
+        v = self.joint_velocities.copy()
 
         if not self.vicon_name or self.run_sim:
-            x_des = x_des_arr[1] 
-            x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
-            x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.3
+            # x_des = x_des_arr[1] 
+            # x_des[1] = 0.0*np.sin(0.0005*thread.ti) + 0.3
+            # x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
+            x_des = [0.5, 0.4, 0.7]
         else:
             x_des = x_des_arr[1] 
             x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3

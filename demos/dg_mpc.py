@@ -24,7 +24,8 @@ run_sim = True
 # x_des_arr = np.array([[0.5, -0.5, 0.4], [0.5, 0.4, 0.6], [0.4, -0.4, 0.4], [0.7, 0.4, 0.5]])
 # x_des = x_des_arr[1]
 x_train = torch.load("../data/x_train1.pt")
-i = np.random.randint(len(x_train))
+# i = np.random.randint(0))
+i = 0
 x_des = x_train[i][-3:].detach().numpy()
 
 if run_sim:
@@ -35,7 +36,7 @@ if run_sim:
     env.add_robot(robot)
     
     q_init = x_train[i][0:7].detach().numpy()
-    q_init += 0.5*(np.random.rand(len(q_init)) - 0.5)*2 
+    # q_init += 0.5*(np.random.rand(len(q_init)) - 0.5)*2 
     v_init = x_train[i][7:14].detach().numpy()
     
     # reader = DataReader('test.mds')
@@ -63,8 +64,8 @@ nq = 7
 n_col = 5
 n_vars = 3*nq*n_col+2*nq
 
-# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet"
-nn_dir = "/home/ameduri/pydevel/ioc_qp/models/test4"
+nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_51.pt"
+# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/test5"
 
 ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, nn_dir, m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
 ctrl.update_desired_position(x_des)
@@ -76,7 +77,7 @@ if not run_sim:
     ctrl.set_gains(kp, kd)
    
 else:
-    ctrl.set_gains(1.0, 0.05)
+    ctrl.set_gains(1.5, 0.05)
 thread_head = ThreadHead(
     0.001, # dt.
     HoldPDController(head, 50., 0.5, with_sliders=False), # Safety controllers.
@@ -90,7 +91,7 @@ thread_head = ThreadHead(
 thread_head.switch_controllers(ctrl)
 if run_sim:
     # thread_head.start_logging(6, "test.mds")
-    thread_head.sim_run_timed(150000)
+    thread_head.sim_run_timed(200000)
     # thread_head.stop_logging()
 
 else:

@@ -36,7 +36,10 @@ print(n_vars)
 
 # loading forward pass class
 
-if os.getlogin() == "ameduri":
+use_nn = False
+
+if os.getlogin() == "ameduri" and use_nn:
+    print("using nn")
     nn_dir = "../models/test4"
     nn = Net(2*nq + 3, 2*n_vars)
     nn.load_state_dict(torch.load(nn_dir))   
@@ -48,15 +51,18 @@ if os.getlogin() == "ameduri":
 
 
 else:
+    print("using qpnet")
     from vocam.qpnet import QPNet
-    nn_dir = "../models/test2"
+    nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_51.pt"
     nn = QPNet(2*nq + 3, 2*n_vars).eval()
     nn.load(nn_dir)
 
-    data_train = torch.load("../data/train.pt")
-    unzipped = list(zip(*data_train))
-    x_train = torch.vstack([*unzipped[0]])
-    y_train = torch.vstack([*unzipped[1]])
+    x_train = torch.load("../data/x_train1.pt")
+
+    # data_train = torch.load("../data/x_train1.pt")
+    # unzipped = list(zip(*data_train))
+    # x_train = torch.vstack([*unzipped[0]])
+    # y_train = torch.vstack([*unzipped[1]])
 
 rt = False
 if not rt:
@@ -68,11 +74,9 @@ else:
     subp.start()
 
 
-
-
 i = 0
 # x_des = x_train[i][-3:].detach().numpy()
-x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])
+x_des_arr = np.array([[0.5, 0.4, 0.7], [0.6, 0.4, 0.5]])
 
 
 robot = KukaBulletEnv()
@@ -88,6 +92,8 @@ state = np.zeros(2*nq)
 eps = 10
 nb_switches = 5
 count = 0
+pln_freq = n_col-1
+lag = 0
 
 # robot.robot.start_recording("./test.mp4")
 target = p.loadURDF("./sphere.urdf", [0,0,0])
@@ -96,35 +102,25 @@ for v in range(nb_switches*n_col*eps) :
 
     q, dq = robot.get_state()
     if v % (n_col*eps) == 0:
-        x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        # x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        x_des = x_des_arr[0]
         p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
-        # print("running feedback number : " + str(j),  end = '\r', flush = True )
         robot.plan.append(1)
     
     if v == 0:
-        if not rt:
-            x_pred = iocfp.predict(q, dq, x_des)    
-        else:
-            parent_conn.send((q, v, x_des))
-            x_pred = parent_conn.recv()
-
+        x_pred = iocfp.predict(q, dq, x_des)    
+    
     q_des = x_pred[count*3*nq:count*3*nq+nq]
     dq_des = x_pred[count*3*nq+nq:count*3*nq+2*nq]
     a_des = x_pred[count*3*nq + 2*nq:count*3*nq+3*nq]
 
-    if count == n_col-1 and not rt:
-        x_pred = iocfp.predict(q, dq, x_des)
+    if count == pln_freq and not rt:
+        x_pred_wait = iocfp.predict(q, dq, x_des)
         robot.plan.append(1)
-        count = -1
     
-    elif count == n_col - 2 and rt:
-        parent_conn.send((q, v, x_des))
-
-    if rt and v != 0:
-        if parent_conn.poll():
-            print("yes", count)
-            x_pred = parent_conn.recv()
-            count = -1
+    if count == pln_freq + lag:
+        x_pred = x_pred_wait
+        count = -1
 
     tmp = count + 1
     nq_des = x_pred[tmp*3*nq:tmp*3*nq+nq]

@@ -66,8 +66,9 @@ class IOCForwardPass:
             self.c_mean = np.array([0.3186, 0.0425, 0.2636])
             self.c_std = np.array([0.1430, 0.1926, 0.1375])
 
-        self.camera = VisionSensor()
-        self.camera.update(None)
+            self.camera = VisionSensor()
+            self.camera.update(None)
+        
         self.collect_data = collect_data
         if self.collect_data:
             self.data = {"color_image": [], "depth_image": [], "position": []}
@@ -86,8 +87,9 @@ class IOCForwardPass:
         x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des))).float()
         if not self.no_norm:
             pred_norm = self.nn(x_input)
+            pred = pred_norm
             # print(pred.shape, self.std.shape, self.m.shape)
-            pred = pred_norm * self.std + self.mean
+            # pred = pred_norm * self.std + self.mean
         else:
             pred_norm = torch.squeeze(self.nn(x_input))
             pred = pred_norm
