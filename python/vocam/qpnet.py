@@ -22,81 +22,93 @@ class DataUtils(object):
         self.task_loss = task_loss
 
     def generate(self, n_tasks):
-        n_samples = n_tasks * self.config.task_horizon
-        self.x_train_init = torch.zeros((n_samples, len(self.config.x_init)))
-        self.x_train_des = torch.zeros((n_samples, 3))
-
-        if not self.config.isvec:
-            self.y_train = torch.zeros((n_samples, 
-                                        self.config.n_vars**2 + self.config.n_vars))
-        else:
-            self.y_train = torch.zeros((n_samples, 
-                                        2*self.config.n_vars))
-
-        all_x_des = []
         n_col, nq, nv = self.config.n_col, self.config.nq, self.config.nv
         u_max, dt = self.config.u_max, self.config.dt
+        X = []
+        Y = []
 
-        for k in trange(n_samples):
-            ioc = IOC(n_col, nq, u_max, dt, eps=1.0, isvec=self.config.isvec)
-            optimizer = torch.optim.Adam(ioc.parameters(), lr=self.config.lr_qp)
+        restart = True
+        for _ in trange(n_tasks):
+            x_init = np.array(self.config.x_init)
+            x_init[nq:] = self.config.dq_noise * (np.random.rand(nv) - 0.5)
 
-            if k % self.config.task_horizon == 0:
-                x_init = np.zeros(2 * nq)
-                if k < 1:
-                    x_des = torch.tensor([0.6, 0.4, 0.7])
-                    x_init[:nq] = np.array([0.0, 0.3, 0.0, -0.8, -0.6,  0.0, 0.0])
-                else:
-                    x_des = self.sample_next_location(x_des.detach())
-                    x_init[:nq] = x_pred[-2*nq:-nq] + 0.4 * (np.random.rand(nq) - 0.5)
-            
-                x_init[nq:] = 0.8 * (np.random.rand(nv) - 0.5) 
-                all_x_des.append(x_des.detach().clone())
-                    
-                if self.viz is not None:
-                    self.viz.display(x_init[:nq])
-                    self.viz.viewer["box"].set_object(g.Sphere(0.05), 
-                                    g.MeshLambertMaterial(
-                                    color=0xff22dd,
-                                    reflectivity=0.8))
-                    self.viz.viewer["box"].set_transform(tf.translation_matrix(x_des.detach().numpy()))
+            if restart:
+                # default goal position
+                x_des = torch.tensor(self.config.default_goal)
+                x_des += self.config.goal_noise * (torch.rand(3) - 0.5)
             else:
-                x_init = x_pred[-2 * nq:]
-
-            self.x_train_init[k] = torch.tensor(x_init)
-            self.x_train_des[k] = x_des
-            
-            i = 0
-            loss = 1000.
-            old_loss = 10000.
-            
-            while (loss > self.config.loss_threshold and 
-                   i < self.config.max_it and 
-                   abs(old_loss - loss) > self.config.loss_convergence):
-                x_pred = ioc(x_init) 
-                old_loss = loss
-                loss = self.task_loss(self.robot, x_pred, x_des, nq, n_col)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                i += 1
-            
-            x_pred = ioc(x_init).detach().numpy()
-            
+                x_des = self.sample_next_location(x_des.detach())
+                x_init[:nq] = x_pred[-2*nq:-nq]
+                
             if self.viz is not None:
-                for i in range(n_col+1):
-                    q = x_pred[3*nq*i:3*nq*i + nq]
-                    dq = x_pred[3*nq*i + nq:3*nq*i + 2*nq]
+                self.viz.display(x_init[:nq])
+                self.viz.viewer["box"].set_object(g.Sphere(0.05), 
+                                g.MeshLambertMaterial(
+                                color=0xff22dd,
+                                reflectivity=0.8))
+                self.viz.viewer["box"].set_transform(tf.translation_matrix(x_des.detach().numpy()))                
 
-                    pin.forwardKinematics(self.model, self.data, q, dq, np.zeros(nv))
-                    pin.updateFramePlacements(self.model, self.data)
-                    self.viz.display(q)
-                    time.sleep(0.01)
-            # storing the weights and x_nom
-            self.y_train[k] = torch.hstack((ioc.weight.flatten(), ioc.x_nom))
+            
+            # allocate memory for the data from the i-th task
+            Xi = torch.zeros((self.config.task_horizon, 
+                              len(self.config.x_init) + 3))
+            if not self.config.isvec:
+                Yi = torch.zeros((self.config.task_horizon,
+                              self.config.n_vars**2 + self.config.n_vars))
+            else:
+                Yi = torch.zeros((self.config.task_horizon, 
+                              2*self.config.n_vars))
+            # MPC loop
+            for j in range(self.config.task_horizon):
+                ioc = IOC(n_col, nq, u_max, dt, eps=1.0, isvec=self.config.isvec)
+                optimizer = torch.optim.Adam(ioc.parameters(), lr=self.config.lr_qp)
+                
+                if j >= 1:
+                    x_init = x_pred[-2 * nq:]
 
-        self.x_train = torch.hstack((self.x_train_init, self.x_train_des)).float()
-        self.y_train = self.y_train.detach().float()
+                old_loss = torch.inf
+                for _ in range(self.config.max_it):
+                    x_pred = ioc(x_init) 
+                    loss = self.task_loss(self.robot, x_pred, x_des, nq, n_col)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    if (loss < self.config.loss_threshold or
+                        abs(old_loss - loss) < self.config.convergence_threshold):
+                        break
+                    else:
+                        old_loss = loss.detach().clone()
+                
+                x_pred = ioc(x_init).detach().numpy()
+
+                if self.viz is not None:
+                    for n in range(n_col + 1):
+                        q = x_pred[3*nq*n:3*nq*n + nq]
+                        dq = x_pred[3*nq*n+nq:3*nq*n+2*nq]
+                        self.viz.display(q)
+                        time.sleep(0.01)
+
+                # storing the weights and x_nom
+                Xi[j] = torch.hstack((torch.tensor(x_init), x_des)).detach().float()
+                Yi[j] = torch.hstack((ioc.weight.flatten(), ioc.x_nom))
+    
+            q = x_pred[-2*nq:-nq]
+            dq = x_pred[-nq:]
+            pin.forwardKinematics(self.model, self.data, q, dq, np.zeros(nv))
+            pin.updateFramePlacements(self.model, self.data)
+            dist = np.linalg.norm(self.data.oMf[self.f_id].translation - x_des.detach().numpy())
+            
+            if dist <= self.config.distance_threshold:
+                # only store successful task executions
+                X.append(Xi)
+                Y.append(Yi)
+                restart = False
+            else:
+                print(dist)
+                restart = True
+
+        self.x_train = torch.vstack(X)
+        self.y_train = torch.vstack(Y)
 
     def sample_next_location(self, curr_location):
         lb = torch.tensor(self.config.lb)
@@ -108,10 +120,15 @@ class DataUtils(object):
         while True:
             diff = diff_range * (torch.rand(3) - 0.5)
             next_location = curr_location + diff
-            if (all(next_location >= lb) 
-                and all(next_location <= ub) 
+            flipped_sign_x = (next_location[0] * curr_location[0] < 0)
+            flipped_sign_y = (next_location[1] * curr_location[1] < 0)
+            if (all(torch.abs(next_location) >= lb) 
+                and all(torch.abs(next_location) <= ub)
+                and next_location[-1] >= 0 # height > 0
+                and torch.linalg.norm(diff) <= diff_range / 2
                 and torch.linalg.norm(next_location) >= dist_lb
-                and torch.linalg.norm(next_location) <= dist_ub): 
+                and torch.linalg.norm(next_location) <= dist_ub
+                and (not flipped_sign_x or not flipped_sign_y)): 
                 break
         return next_location
 
