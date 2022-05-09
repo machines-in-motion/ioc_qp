@@ -30,6 +30,7 @@ class DataUtils(object):
         restart = True
         for _ in trange(n_tasks):
             x_init = np.array(self.config.x_init)
+            x_init[:nq] += self.config.q_noise * (np.random.rand(nv) - 0.5)
             x_init[nq:] = self.config.dq_noise * (np.random.rand(nv) - 0.5)
 
             if restart:
