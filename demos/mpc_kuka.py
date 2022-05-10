@@ -53,13 +53,13 @@ if os.getlogin() == "ameduri" and use_nn:
 else:
     print("using qpnet")
     from vocam.qpnet import QPNet
-    nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_51.pt"
+    nn_dir = "../models/qpnet_70.pt"
     nn = QPNet(2*nq + 3, 2*n_vars).eval()
     nn.load(nn_dir)
 
     x_train = torch.load("../data/x_train1.pt")
 
-    # data_train = torch.load("../data/x_train1.pt")
+    # data_train = torch.load("../data/data_100_50.pt")
     # unzipped = list(zip(*data_train))
     # x_train = torch.vstack([*unzipped[0]])
     # y_train = torch.vstack([*unzipped[1]])
@@ -76,7 +76,7 @@ else:
 
 i = 0
 # x_des = x_train[i][-3:].detach().numpy()
-x_des_arr = np.array([[0.5, 0.4, 0.7], [0.6, 0.4, 0.5]])
+x_des_arr = np.array([[0.5, -0.4, 0.7], [0.6, 0.4, 0.5]])
 
 
 robot = KukaBulletEnv()
@@ -90,10 +90,10 @@ robot.reset_robot(q_init, v_init)
 count = 0
 state = np.zeros(2*nq)
 eps = 10
-nb_switches = 5
+nb_switches = 10
 count = 0
-pln_freq = n_col-1
-lag = 0
+pln_freq = n_col - 2
+lag = 1
 
 # robot.robot.start_recording("./test.mp4")
 target = p.loadURDF("./sphere.urdf", [0,0,0])
@@ -102,8 +102,8 @@ for v in range(nb_switches*n_col*eps) :
 
     q, dq = robot.get_state()
     if v % (n_col*eps) == 0:
-        # x_des = x_des_arr[np.random.randint(len(x_des_arr))]
-        x_des = x_des_arr[0]
+        x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        # x_des = x_des_arr[0]
         p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
         robot.plan.append(1)
     
