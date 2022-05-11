@@ -28,14 +28,15 @@ class DataUtils(object):
         Y = []
 
         restart = True
-        for _ in trange(n_tasks):
+        for i in trange(n_tasks):
             x_init = np.array(self.config.x_init)
             x_init[:nq] += self.config.q_noise * (np.random.rand(nv) - 0.5)
             x_init[nq:] = self.config.dq_noise * (np.random.rand(nv) - 0.5)
 
             if restart:
                 # default goal position
-                x_des = torch.tensor(self.config.default_goal)
+                rand_idx = np.random.randint(len(self.config.default_goals))
+                x_des = torch.tensor(self.config.default_goals[rand_idx])
                 x_des += self.config.goal_noise * (torch.rand(3) - 0.5)
             else:
                 x_des = self.sample_next_location(x_des.detach())
@@ -62,7 +63,9 @@ class DataUtils(object):
             # MPC loop
             for j in range(self.config.task_horizon):
                 ioc = IOC(n_col, nq, u_max, dt, eps=1.0, isvec=self.config.isvec)
-                optimizer = torch.optim.Adam(ioc.parameters(), lr=self.config.lr_qp)
+                optimizer = torch.optim.Adam(ioc.parameters(), 
+                                         lr=self.config.lr_qp,
+                                         betas=(0.8, 0.9))
                 
                 if j >= 1:
                     x_init = x_pred[-2 * nq:]
@@ -91,7 +94,8 @@ class DataUtils(object):
 
                 # storing the weights and x_nom
                 Xi[j] = torch.hstack((torch.tensor(x_init), x_des)).detach().float()
-                Yi[j] = torch.hstack((ioc.weight.flatten(), ioc.x_nom))
+                Yi[j] = torch.hstack((ioc.weight.detach().clone().flatten(), 
+                                      ioc.x_nom.detach().clone()))
     
             q = x_pred[-2*nq:-nq]
             dq = x_pred[-nq:]
@@ -103,7 +107,10 @@ class DataUtils(object):
                 # only store successful task executions
                 X.append(Xi)
                 Y.append(Yi)
-                restart = False
+                if (i + 1) % self.config.n_restart == 0:
+                    restart = True
+                else:
+                    restart = False
             else:
                 print(dist)
                 restart = True
@@ -123,12 +130,12 @@ class DataUtils(object):
             next_location = curr_location + diff
             flipped_sign_x = (next_location[0] * curr_location[0] < 0)
             flipped_sign_y = (next_location[1] * curr_location[1] < 0)
-            if (all(torch.abs(next_location) >= lb) 
-                and all(torch.abs(next_location) <= ub)
-                and next_location[-1] >= 0 # height > 0
+            if (all(next_location >= lb) 
+                and all(next_location <= ub)
+                and torch.linalg.norm(diff) >= diff_range / 4
                 and torch.linalg.norm(diff) <= diff_range / 2
-                and torch.linalg.norm(next_location) >= dist_lb
-                and torch.linalg.norm(next_location) <= dist_ub
+                and torch.linalg.norm(next_location[:2]) >= dist_lb
+                and torch.linalg.norm(next_location[:2]) <= dist_ub
                 and (not flipped_sign_x or not flipped_sign_y)): 
                 break
         return next_location
@@ -175,8 +182,8 @@ class QPNet(nn.Module):
     def save(self, path):
         torch.save(self.state_dict(), path)
 
-    def load(self, path):
-        self.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+    def load(self, path, device='cpu'):
+        self.load_state_dict(torch.load(path, map_location=torch.device(device)))
 
 def train(network, criterion, optimizer, dataloader, device):
     network.train()

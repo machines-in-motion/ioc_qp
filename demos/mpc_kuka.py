@@ -50,13 +50,13 @@ if os.getlogin() == "ameduri" and use_nn:
 else:
     print("using qpnet")
     from vocam.qpnet import QPNet
-    nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_51.pt"
+    nn_dir = "../models/qpnet_70.pt"
     nn = QPNet(2*nq + 3, 2*n_vars).eval()
     nn.load(nn_dir)
 
     x_train = torch.load("../data/x_train1.pt")
 
-    # data_train = torch.load("../data/x_train1.pt")
+    # data_train = torch.load("../data/data_100_50.pt")
     # unzipped = list(zip(*data_train))
     # x_train = torch.vstack([*unzipped[0]])
     # y_train = torch.vstack([*unzipped[1]])
@@ -89,8 +89,8 @@ state = np.zeros(2*nq)
 eps = 25
 nb_switches = 3
 count = 0
-pln_freq = n_col-1
-lag = 0
+pln_freq = n_col - 2
+lag = 1
 
 # robot.robot.start_recording("./test.mp4")
 target = p.loadURDF("./sphere.urdf", [0,0,0])
