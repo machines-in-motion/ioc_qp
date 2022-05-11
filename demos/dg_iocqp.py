@@ -118,7 +118,7 @@ class DiffQPController:
         cube_pos = cube_pos[0:3]
         if np.linalg.norm(cube_pos) > 0:
             cube_pos[0] += 0.1 
-            cube_pos[2] -= 0.15
+            # cube_pos[2] -= 0.15
             self.prev_cube_pos = cube_pos
 
         else:
@@ -140,15 +140,15 @@ class DiffQPController:
         v = self.joint_velocities.copy()
 
         if not self.vicon_name or self.run_sim:
-            # x_des = x_des_arr[1] 
-            # x_des[1] = 0.0*np.sin(0.0005*thread.ti) + 0.3
-            # x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
-            x_des = [0.5, 0.4, 0.7]
-        else:
             x_des = x_des_arr[1] 
-            x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
-            x_des[2] = 0.2*np.cos(0.0002*thread.ti) + 0.3
-            # x_des = self.get_cube_pos(thread)
+            x_des[1] = 0.2*np.sin(0.0005*thread.ti) + 0.3
+            x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
+            # x_des = [0.5, 0.4, 0.7]
+        else:
+            # x_des = x_des_arr[1] 
+            # x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
+            # x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
+            x_des = self.get_cube_pos(thread)
         
         self.update_desired_position(x_des)
         
@@ -190,7 +190,7 @@ class DiffQPController:
         
         tau = np.reshape(pin.rnea(self.pinModel, self.pinData, q, v, self.a_des), (self.nq,))
         self.gravity = np.reshape(pin.rnea(self.pinModel, self.pinData, q, np.zeros_like(q), np.zeros_like(q)), (self.nq,))
-        
+    
         tau_gain = -self.kp*(np.subtract(q.T, self.q_des)) - self.kd*(np.subtract(v.T, self.dq_des))
         self.tau_total = np.reshape((tau_gain + tau), (7,)).T
         

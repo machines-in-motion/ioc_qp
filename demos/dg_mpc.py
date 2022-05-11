@@ -23,7 +23,7 @@ run_sim = True
 
 # x_des_arr = np.array([[0.5, -0.5, 0.4], [0.5, 0.4, 0.6], [0.4, -0.4, 0.4], [0.7, 0.4, 0.5]])
 # x_des = x_des_arr[1]
-x_train = torch.load("../data/x_train1.pt")
+x_train = torch.load("../data/x_train5.pt")
 # i = np.random.randint(0))
 i = 0
 x_des = x_train[i][-3:].detach().numpy()
@@ -64,7 +64,7 @@ nq = 7
 n_col = 5
 n_vars = 3*nq*n_col+2*nq
 
-nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_51.pt"
+nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_75.pt"
 # nn_dir = "/home/ameduri/pydevel/ioc_qp/models/test5"
 
 ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, nn_dir, m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
@@ -72,8 +72,8 @@ ctrl.update_desired_position(x_des)
 if not run_sim:
     # kp = np.array([250.0, 250.0, 250.0, 250.0, 180.0, 30.0, 30.0])
     # kd = np.array([15.0, 15.0, 18.0, 18.0, 18.0, 5.0, 5.0])
-    kp = np.array([80.0, 80.0, 80.0, 80.0, 60.0, 10.0, 10.0])
-    kd = np.array([8.0, 8.0, 8.0, 8.0, 8.0, 3.0, 3.0])
+    kp = np.array([250.0, 150.0, 100.0, 80.0, 80.0, 10.0, 10.0])
+    kd = np.array([10.0, 10.0, 10.0, 10.0, 10.0, 1.0, 1.0])
     ctrl.set_gains(kp, kd)
    
 else:
@@ -96,5 +96,5 @@ if run_sim:
 
 else:
     thread_head.start()
-    thread_head.start_logging(3, "test.mds")
+    thread_head.start_logging(6, "test.mds")
 

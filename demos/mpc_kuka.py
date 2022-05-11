@@ -33,7 +33,7 @@ u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
 n_vars = 3*nq*n_col+2*nq
 
 # loading forward pass class
-use_nn = True
+use_nn = False
 
 if os.getlogin() == "ameduri" and use_nn:
     print("using nn")
@@ -50,11 +50,11 @@ if os.getlogin() == "ameduri" and use_nn:
 else:
     print("using qpnet")
     from vocam.qpnet import QPNet
-    nn_dir = "../models/qpnet_70.pt"
+    nn_dir = "../models/qpnet_75.pt"
     nn = QPNet(2*nq + 3, 2*n_vars).eval()
     nn.load(nn_dir)
 
-    x_train = torch.load("../data/x_train1.pt")
+    x_train = torch.load("../data/x_train5.pt")
 
     # data_train = torch.load("../data/data_100_50.pt")
     # unzipped = list(zip(*data_train))
@@ -71,9 +71,9 @@ else:
     subp.start()
 
 
-i = np.random.randint(8000)
+i = np.random.randint(2)
 x_des = x_train[i][-3:].detach().numpy()
-# x_des_arr = np.array([[0.5, 0.4, 0.7], [0.6, 0.4, 0.5]])
+x_des_arr = np.array([[0.5, 0.4, 0.7], [0.6, 0.4, 0.5]])
 
 
 robot = KukaBulletEnv()
@@ -100,7 +100,7 @@ for v in range(nb_switches*n_col*eps) :
     q, dq = robot.get_state()
 
     if v % (n_col*eps) == 0:
-        # x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        x_des = x_des_arr[np.random.randint(len(x_des_arr))]
         p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
         robot.plan.append(1)
     
