@@ -32,22 +32,19 @@ n_col = 5
 u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
 n_vars = 3*nq*n_col+2*nq
 
-print(n_vars)
-
 # loading forward pass class
-
-use_nn = False
+use_nn = True
 
 if os.getlogin() == "ameduri" and use_nn:
     print("using nn")
-    nn_dir = "../models/test4"
+    nn_dir = "../models/model2"
     nn = Net(2*nq + 3, 2*n_vars)
     nn.load_state_dict(torch.load(nn_dir))   
     # loading mean and std
     m = torch.load("../data/mean.pt")
     std = torch.load("../data/std.pt")
 
-    x_train = torch.load("../data/x_train1.pt")
+    x_train = torch.load("../data/x_train3.pt")
 
 
 else:
@@ -74,9 +71,9 @@ else:
     subp.start()
 
 
-i = 0
-# x_des = x_train[i][-3:].detach().numpy()
-x_des_arr = np.array([[0.5, 0.4, 0.7], [0.6, 0.4, 0.5]])
+i = np.random.randint(8000)
+x_des = x_train[i][-3:].detach().numpy()
+# x_des_arr = np.array([[0.5, 0.4, 0.7], [0.6, 0.4, 0.5]])
 
 
 robot = KukaBulletEnv()
@@ -89,8 +86,8 @@ robot.reset_robot(q_init, v_init)
 
 count = 0
 state = np.zeros(2*nq)
-eps = 10
-nb_switches = 5
+eps = 25
+nb_switches = 3
 count = 0
 pln_freq = n_col-1
 lag = 0
@@ -101,9 +98,9 @@ target = p.loadURDF("./sphere.urdf", [0,0,0])
 for v in range(nb_switches*n_col*eps) :
 
     q, dq = robot.get_state()
+
     if v % (n_col*eps) == 0:
         # x_des = x_des_arr[np.random.randint(len(x_des_arr))]
-        x_des = x_des_arr[0]
         p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
         robot.plan.append(1)
     

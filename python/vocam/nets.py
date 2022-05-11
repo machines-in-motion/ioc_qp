@@ -7,13 +7,14 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
+
 class Net(torch.nn.Module):
 
     def __init__(self, inp_size, out_size):
         super(Net, self).__init__()
-        self.fc1 = torch.nn.Linear(inp_size, 512)
-        self.fc2 = torch.nn.Linear(512, 512)
-        self.out = torch.nn.Linear(512, out_size)
+        self.fc1 = torch.nn.Linear(inp_size, 256)
+        self.fc2 = torch.nn.Linear(256, 256)
+        self.out = torch.nn.Linear(256, out_size)
 
     def forward(self, x):
        

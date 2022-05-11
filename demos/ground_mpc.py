@@ -2,19 +2,25 @@
 ## Author : Avadesh Meduri
 ## Date : 1/03/2022
 
-from calendar import c
+import pathlib
+import os
+python_path = pathlib.Path('.').absolute().parent/'python'
+os.sys.path.insert(1, str(python_path))
+
 import numpy as np
-from python.env.kuka_bullet_env import KukaBulletEnv
+from env.kuka_bullet_env import KukaBulletEnv
 import torch
 from torch.autograd import Function
 from torch.nn import functional as F
 
-from inverse_qp import IOC, IOCForwardPass
+from vocam.forward_pass import IOCForwardPassWithoutVision, rt_IOCForwardPassWithoutVision
+from vocam.inverse_qp import IOC
+
 import pybullet as p
 from robot_properties_kuka.config import IiwaConfig
 
 import time
-from diff_pin_costs import DiffFrameTranslationCost, DiffFrameVelocityCost
+from vocam.diff_pin_costs import DiffFrameTranslationCost, DiffFrameVelocityCost
 
 robot = IiwaConfig.buildRobotWrapper()
 model, data = robot.model, robot.data
@@ -24,8 +30,8 @@ dtc = DiffFrameTranslationCost.apply
 dvc = DiffFrameVelocityCost.apply
 
 def quadratic_loss(q_pred, x_des, nq, n_col):
-    loss = 3e1*torch.linalg.norm(dtc(q_pred[-2*nq:], model, data, f_id) - x_des)
-    loss += 1e0*torch.linalg.norm(dvc(q_pred[-2*nq:], torch.zeros(nq), model, data, f_id)) # asking for zero velocity
+    loss = 4.0e1*torch.linalg.norm(dtc(q_pred[-2*nq:], model, data, f_id) - x_des)
+    loss += 2.5e0*torch.linalg.norm(dvc(q_pred[-2*nq:], torch.zeros(nq), model, data, f_id)) # asking for zero velocity
     loss += 1e-2*torch.linalg.norm(q_pred[-2*nq:-nq]) # joint regularization
     
     for i in range(n_col):    
@@ -34,6 +40,8 @@ def quadratic_loss(q_pred, x_des, nq, n_col):
         loss += 1e-2*torch.linalg.norm(q_pred[(3*i+2)*nq: (3*i+3)*nq]) # control regularization
         loss += 2e-1*torch.linalg.norm(q_pred[(3*i+1)*nq: (3*i+2)*nq]) # velocity regularization
         loss += 3e-3*torch.linalg.norm(q_pred[(3*i)*nq: (3*i+1)*nq]) # joint regularization
+        loss += 2e-3*torch.linalg.norm(q_pred[(3*i)*nq+3: (3*i+1)*nq])
+        loss += 4e-3*torch.linalg.norm(q_pred[(3*i)*nq+5])
         
         if i < n_col - 1:
             loss += 5e-2*torch.linalg.norm(torch.subtract(q_pred[(3*i+2)*nq: (3*i+3)*nq], \
@@ -77,7 +85,7 @@ isvec = True
 ioc = IOC(n_col, nq, u_max, dt, eps = 1.0, isvec=isvec)
 n_vars = 3*nq*n_col + 2*nq
 
-x_des_arr = np.array([[0.5, -0.4, 0.4], [0.6, 0.4, 0.7]])
+x_des_arr = np.array([[0.6, 0.2, 0.5], [0.6, 0.2, 0.5]])
 
 robot = KukaBulletEnv()
 robot.set_gains(2.5, 0.1)
@@ -90,9 +98,10 @@ robot.reset_robot(q_init, np.zeros_like(q_des))
 count = 0
 state = np.zeros(2*nq)
 eps = 15
-nb_switches = 5
+nb_switches = 1
 count = 0
-
+pln_freq = n_col-2
+lag = 1
 # robot.robot.start_recording("./test.mp4")
 target = p.loadURDF("./sphere.urdf", [0,0,0])
 
@@ -113,11 +122,14 @@ for v in range(nb_switches*n_col*eps) :
     dq_des = x_pred[count*3*nq+nq:count*3*nq+2*nq]
     a_des = x_pred[count*3*nq + 2*nq:count*3*nq+3*nq]
 
-    if count == n_col-1:
-        x_pred = regress(q, dq)
+    if count == pln_freq:
+        x_pred_wait = regress(q, dq)
         robot.plan.append(1)
-        count = -1
         
+    if count == pln_freq + lag:
+        x_pred = x_pred_wait
+        count = -1
+
     tmp = count + 1
     nq_des = x_pred[tmp*3*nq:tmp*3*nq+nq]
     ndq_des = x_pred[tmp*3*nq+nq:tmp*3*nq+2*nq]
