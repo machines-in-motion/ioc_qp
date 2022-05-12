@@ -36,10 +36,10 @@ class DataUtils(object):
             if restart:
                 # default goal position
                 rand_idx = np.random.randint(len(self.config.default_goals))
-                x_des = torch.tensor(self.config.default_goals[rand_idx])
-                x_des += self.config.goal_noise * (torch.rand(3) - 0.5)
+                goal = torch.tensor(self.config.default_goals[rand_idx])
+                goal += self.config.goal_noise * (torch.rand(3) - 0.5)
             else:
-                x_des = self.sample_next_location(x_des.detach())
+                goal = self.sample_next_location(goal.detach())
                 x_init[:nq] = x_pred[-2*nq:-nq]
                 
             if self.viz is not None:
@@ -48,7 +48,7 @@ class DataUtils(object):
                                 g.MeshLambertMaterial(
                                 color=0xff22dd,
                                 reflectivity=0.8))
-                self.viz.viewer["box"].set_transform(tf.translation_matrix(x_des.detach().numpy()))                
+                self.viz.viewer["box"].set_transform(tf.translation_matrix(goal.detach().numpy()))                
 
             
             # allocate memory for the data from the i-th task
@@ -64,8 +64,7 @@ class DataUtils(object):
             for j in range(self.config.task_horizon):
                 ioc = IOC(n_col, nq, u_max, dt, eps=1.0, isvec=self.config.isvec)
                 optimizer = torch.optim.Adam(ioc.parameters(), 
-                                         lr=self.config.lr_qp,
-                                         betas=(0.8, 0.9))
+                                             lr=self.config.lr_qp)
                 
                 if j >= 1:
                     x_init = x_pred[-2 * nq:]
@@ -73,7 +72,7 @@ class DataUtils(object):
                 old_loss = torch.inf
                 for _ in range(self.config.max_it):
                     x_pred = ioc(x_init) 
-                    loss = self.task_loss(self.robot, x_pred, x_des, nq, n_col)
+                    loss = self.task_loss(self.robot, x_pred, goal, nq, n_col)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -90,10 +89,9 @@ class DataUtils(object):
                         q = x_pred[3*nq*n:3*nq*n + nq]
                         dq = x_pred[3*nq*n+nq:3*nq*n+2*nq]
                         self.viz.display(q)
-                        time.sleep(0.01)
 
                 # storing the weights and x_nom
-                Xi[j] = torch.hstack((torch.tensor(x_init), x_des)).detach().float()
+                Xi[j] = torch.hstack((torch.tensor(x_init), goal)).detach().float()
                 Yi[j] = torch.hstack((ioc.weight.detach().clone().flatten(), 
                                       ioc.x_nom.detach().clone()))
     
@@ -101,7 +99,7 @@ class DataUtils(object):
             dq = x_pred[-nq:]
             pin.forwardKinematics(self.model, self.data, q, dq, np.zeros(nv))
             pin.updateFramePlacements(self.model, self.data)
-            dist = np.linalg.norm(self.data.oMf[self.f_id].translation - x_des.detach().numpy())
+            dist = np.linalg.norm(self.data.oMf[self.f_id].translation - goal.detach().numpy())
             
             if dist <= self.config.distance_threshold:
                 # only store successful task executions
@@ -149,6 +147,24 @@ class DataUtils(object):
         unzipped = list(zip(*self.data_train))
         self.x_train = torch.vstack([*unzipped[0]])
         self.y_train = torch.vstack([*unzipped[1]])
+    
+    def visualize(self, task_idx):
+        start = task_idx * self.config.task_horizon
+        end = start + self.config.task_horizon
+        q = self.x_train[start:end, :self.config.nq].detach().cpu().numpy()
+        goal = self.x_train[start, -3:].detach().cpu().numpy()
+        if self.viz is not None:
+            self.viz.display(q[0])
+            self.viz.viewer["box"].set_object(g.Sphere(0.05), 
+                                              g.MeshLambertMaterial(
+                                              color=0xff22dd,
+                                              reflectivity=0.8))
+            self.viz.viewer["box"].set_transform(tf.translation_matrix(goal))
+            time.sleep(0.5) 
+            for n in range(len(q)):
+                self.viz.display(q[n])
+                time.sleep(0.05)
+        
 
 class QPNet(nn.Module):
     def __init__(self, input_size, output_size):
