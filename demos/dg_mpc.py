@@ -23,7 +23,7 @@ run_sim = True
 
 # x_des_arr = np.array([[0.5, -0.5, 0.4], [0.5, 0.4, 0.6], [0.4, -0.4, 0.4], [0.7, 0.4, 0.5]])
 # x_des = x_des_arr[1]
-x_train = torch.load("../data/x_train5.pt")
+x_train = torch.load("../data/x_train8.pt")
 # i = np.random.randint(0))
 i = 0
 x_des = x_train[i][-3:].detach().numpy()
@@ -58,21 +58,23 @@ else:
 pin_robot = IiwaConfig.buildRobotWrapper()
 
 # loading mean and std
-m = torch.load("../data/mean.pt")
-std = torch.load("../data/std.pt")
+# m = torch.load("../data/mean.pt")
+# std = torch.load("../data/std.pt")
+m = None
+std = None
 nq = 7
 n_col = 5
 n_vars = 3*nq*n_col+2*nq
 
-nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_75.pt"
-# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/test5"
+# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_75.pt"
+nn_dir = "/home/ameduri/pydevel/ioc_qp/models/model2"
 
 ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, nn_dir, m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
 ctrl.update_desired_position(x_des)
 if not run_sim:
     # kp = np.array([250.0, 250.0, 250.0, 250.0, 180.0, 30.0, 30.0])
     # kd = np.array([15.0, 15.0, 18.0, 18.0, 18.0, 5.0, 5.0])
-    kp = np.array([250.0, 150.0, 100.0, 80.0, 80.0, 10.0, 10.0])
+    kp = np.array([150.0, 150.0, 80.0, 40.0, 40.0, 10.0, 10.0])
     kd = np.array([10.0, 10.0, 10.0, 10.0, 10.0, 1.0, 1.0])
     ctrl.set_gains(kp, kd)
    

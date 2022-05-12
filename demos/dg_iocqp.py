@@ -149,7 +149,7 @@ class DiffQPController:
             # x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
             # x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
             x_des = self.get_cube_pos(thread)
-        
+        # print(x_des)
         self.update_desired_position(x_des)
         
         if thread.ti % int(self.dt*1000) == 0:
