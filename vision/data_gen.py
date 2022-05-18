@@ -4,8 +4,9 @@
 
 
 import time
-from dynamic_graph_head import ThreadHead, ImageLogger, HoldPDController, Vicon, VisionSensor
 import dynamic_graph_manager_cpp_bindings
+from dynamic_graph_head import ThreadHead, HoldPDController, Vicon, VisionSensor
+from logger import ImageLogger
 from robot_properties_kuka.config import IiwaConfig
 import pinocchio as pin
 import numpy as np
@@ -25,45 +26,45 @@ import numpy as np
 
 pin_robot = IiwaConfig.buildRobotWrapper()
 
-class C_Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv11 = nn.Conv2d(4, 64, 3)
-        self.conv12 = nn.Conv2d(64, 64, 3)
+# class C_Net(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         self.conv11 = nn.Conv2d(4, 64, 3)
+#         self.conv12 = nn.Conv2d(64, 64, 3)
 
-        self.pool = nn.MaxPool2d(2, 2)
+#         self.pool = nn.MaxPool2d(2, 2)
         
-        self.conv21 = nn.Conv2d(64, 128, 3)
-        self.conv22 = nn.Conv2d(128, 128, 3)
+#         self.conv21 = nn.Conv2d(64, 128, 3)
+#         self.conv22 = nn.Conv2d(128, 128, 3)
 
-        self.conv31 = nn.Conv2d(128, 256, 3)
-        self.conv32 = nn.Conv2d(256, 256, 3)
+#         self.conv31 = nn.Conv2d(128, 256, 3)
+#         self.conv32 = nn.Conv2d(256, 256, 3)
         
-        self.conv41 = nn.Conv2d(256, 512, 3)
-        self.conv42 = nn.Conv2d(512, 512, 3)
+#         self.conv41 = nn.Conv2d(256, 512, 3)
+#         self.conv42 = nn.Conv2d(512, 512, 3)
         
-        self.fc1 = nn.Linear(512, 512)
-        self.fc3 = nn.Linear(512, 3)
-#         self.fc3 = nn.Linear(128, 3)
+#         self.fc1 = nn.Linear(512, 512)
+#         self.fc3 = nn.Linear(512, 3)
+# #         self.fc3 = nn.Linear(128, 3)
 
-    def forward(self, x):
-        x = F.relu(self.conv11(x))
-        x = self.pool(F.relu(self.conv12(x)))
-        x = F.relu(self.conv21(x))
-        x = self.pool(F.relu(self.conv22(x)))
+#     def forward(self, x):
+#         x = F.relu(self.conv11(x))
+#         x = self.pool(F.relu(self.conv12(x)))
+#         x = F.relu(self.conv21(x))
+#         x = self.pool(F.relu(self.conv22(x)))
         
-        x = self.pool(F.relu(self.conv31(x)))
-        x = self.pool(F.relu(self.conv32(x)))
+#         x = self.pool(F.relu(self.conv31(x)))
+#         x = self.pool(F.relu(self.conv32(x)))
         
-        x = F.relu(self.conv41(x))
-        x = self.pool(F.relu(self.conv42(x)))
+#         x = F.relu(self.conv41(x))
+#         x = self.pool(F.relu(self.conv42(x)))
             
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
-#         print(x.shape)
-        x = F.relu(self.fc1(x))
-#         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+#         x = torch.flatten(x, 1) # flatten all dimensions except batch
+# #         print(x.shape)
+#         x = F.relu(self.fc1(x))
+# #         x = F.relu(self.fc2(x))
+#         x = self.fc3(x)
+#         return x
 
 class ConstantTorque:
     def __init__(self, head, robot_model, robot_data):
@@ -80,15 +81,15 @@ class ConstantTorque:
         self.parent_conn, self.child_conn = Pipe()
         self.data = {"color_image": [], "depth_image": [], "position": []}
         
-        self.cnet = C_Net()
-        self.cnet.load_state_dict(torch.load("./models/cnn3", map_location=torch.device('cpu')))
-        self.mean = np.array([0.3186, 0.0425, 0.2636])
-        self.std = np.array([0.1430, 0.1926, 0.1375])
+        # self.cnet = C_Net()
+        # self.cnet.load_state_dict(torch.load("./models/cnn3", map_location=torch.device('cpu')))
+        # self.mean = np.array([0.3186, 0.0425, 0.2636])
+        # self.std = np.array([0.1430, 0.1926, 0.1375])
 
 
     def warmup(self, thread_head):
-        # self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data15", 0.4, self.child_conn))
-        # self.subp.start()
+        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data6", 0.1, self.child_conn))
+        self.subp.start()
         self.init = self.joint_positions.copy()
 
         pass
@@ -99,12 +100,12 @@ class ConstantTorque:
             c_image = ToTensor()((imread("image_data/" + "color_" + str(1) + ".jpg")))
             d_image = ToTensor()((imread("image_data/" + "depth_" + str(1) + ".jpg")))
             image = torch.vstack((c_image, d_image))
-            image = transforms.functional.crop(image, 0, 100, 150, 150)
+            image = transforms.functional.crop(image, 80, 100, 350, 350)
             image = image[None,:,:,:]
-            pred = self.cnet(image)
+            # pred = self.cnet(image)
             self.image = image
-        
-        return (pred*self.std + self.mean).numpy()[0]
+        return None
+        # return (pred*self.std + self.mean).numpy()[0]
 
     def run(self, thread):
         t1 = time.time()
@@ -116,18 +117,18 @@ class ConstantTorque:
         cv2.imwrite("./image_data/" + "depth_" + str(1) + ".jpg", self.depth_image)
 
         pred = self.predict_cnn()
-        print(pred, pos[0:3], np.linalg.norm(pred - pos[0:3]))
-        
-        # self.data["color_image"] = self.color_image
-        # self.data["depth_image"] = self.depth_image
-        # self.data["position"] = pos[0:3]
-        # self.parent_conn.send((self.data, thread.ti))
+        # print(pred, pos[0:3], np.linalg.norm(pred - pos[0:3]))
+        # print(self.color_image.shape)
+        self.data["color_image"] = self.color_image
+        self.data["depth_image"] = self.depth_image
+        self.data["position"] = pos[0:3]
+        self.parent_conn.send((self.data, thread.ti))
 
         box = ToPILImage()(self.image[0][0:3])
         opencvImage = cv2.cvtColor(np.array(box), cv2.COLOR_RGB2BGR)
 
         cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-        cv2.imshow('RealSense', self.color_image)
+        cv2.imshow('RealSense', opencvImage)
         cv2.waitKey(1)
 
         ti = thread.ti

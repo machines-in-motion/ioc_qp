@@ -145,10 +145,10 @@ class DiffQPController:
             x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
             # x_des = [0.5, 0.4, 0.7]
         else:
-            # x_des = x_des_arr[1] 
-            # x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
-            # x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
-            x_des = self.get_cube_pos(thread)
+            x_des = x_des_arr[1] 
+            x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
+            x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
+            # x_des = self.get_cube_pos(thread)
         # print(x_des)
         self.update_desired_position(x_des)
         
@@ -192,13 +192,12 @@ class DiffQPController:
         self.gravity = np.reshape(pin.rnea(self.pinModel, self.pinData, q, np.zeros_like(q), np.zeros_like(q)), (self.nq,))
     
         tau_gain = -self.kp*(np.subtract(q.T, self.q_des)) - self.kd*(np.subtract(v.T, self.dq_des))
-        self.tau_total = np.reshape((tau_gain + tau), (7,)).T
+        self.tau_total = -1*np.reshape((tau_gain + tau), (7,)).T #only for plotting
         
-        tau_total = self.tau_total 
+        self.tau_in = np.reshape((tau_gain + tau), (7,)).T
         if not self.run_sim:
-            tau_total -= self.gravity
-            
-        self.tau_in = tau_total
+            self.tau_in -= self.gravity.copy()
+                    
         self.index += 1
         t2 = time.time()
 
@@ -208,4 +207,6 @@ class DiffQPController:
         pin.updateFramePlacements(self.pinModel, self.pinData)
         self.ee_pos = self.pinData.oMf[self.f_id].translation
 
-        self.head.set_control('ctrl_joint_torques', tau_total)
+        self.head.set_control('ctrl_joint_torques', self.tau_in)        
+        self.head.set_control('time_sent', np.array([thread.ti*1e-3]))
+        self.head.set_control('desired_joint_positions', self.q_des)

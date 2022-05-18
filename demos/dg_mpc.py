@@ -19,7 +19,7 @@ from bullet_utils.env import BulletEnvWithGround
 
 from mim_data_utils import DataReader
 
-run_sim = True
+run_sim = False
 
 # x_des_arr = np.array([[0.5, -0.5, 0.4], [0.5, 0.4, 0.6], [0.4, -0.4, 0.4], [0.7, 0.4, 0.5]])
 # x_des = x_des_arr[1]
@@ -51,7 +51,8 @@ if run_sim:
 
 else:
 
-    head = dynamic_graph_manager_cpp_bindings.DGMHead(IiwaConfig.yaml_path)
+    path = "/home/ameduri/devel/workspace/install/robot_properties_kuka/lib/python3.8/site-packages/robot_properties_kuka/robot_properties_kuka/dynamic_graph_manager/dgm_parameters_iiwa.yaml"
+    head = dynamic_graph_manager_cpp_bindings.DGMHead(path)
     target = None
     env = None
 
@@ -66,16 +67,19 @@ nq = 7
 n_col = 5
 n_vars = 3*nq*n_col+2*nq
 
-# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_75.pt"
-nn_dir = "/home/ameduri/pydevel/ioc_qp/models/model2"
+# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_77.pt"
+nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_89.pt"
+# nn_dir = "/home/ameduri/pydevel/ioc_qp/models/model2"
 
 ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, nn_dir, m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
 ctrl.update_desired_position(x_des)
 if not run_sim:
     # kp = np.array([250.0, 250.0, 250.0, 250.0, 180.0, 30.0, 30.0])
     # kd = np.array([15.0, 15.0, 18.0, 18.0, 18.0, 5.0, 5.0])
-    kp = np.array([150.0, 150.0, 80.0, 40.0, 40.0, 10.0, 10.0])
-    kd = np.array([10.0, 10.0, 10.0, 10.0, 10.0, 1.0, 1.0])
+    # kp = np.array([30.0, 30.0, 30.0, 20.0, 20.0, 10.0, 10.0])
+    # kd = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 1.0, 1.0])
+    kp = np.array([10.0, 10.0, 0.0, 0.0, 1.0, 1.0, 1.0])
+    kd = np.array([1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0])
     ctrl.set_gains(kp, kd)
    
 else:
@@ -98,5 +102,7 @@ if run_sim:
 
 else:
     thread_head.start()
-    thread_head.start_logging(6, "test.mds")
+    # thread_head.start_logging(10, "test.mds")
+    # time.sleep(30)
+    # thread_head.plot_timing()
 
