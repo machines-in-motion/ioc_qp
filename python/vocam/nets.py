@@ -23,6 +23,7 @@ class Net(torch.nn.Module):
         x = self.out(x)
         return x
 
+
 class C_Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -36,29 +37,31 @@ class C_Net(nn.Module):
 
         self.conv31 = nn.Conv2d(128, 256, 3)
         self.conv32 = nn.Conv2d(256, 256, 3)
+        self.conv33 = nn.Conv2d(256, 256, 3)
+
         
         self.conv41 = nn.Conv2d(256, 512, 3)
         self.conv42 = nn.Conv2d(512, 512, 3)
         
         self.fc1 = nn.Linear(512, 512)
         self.fc3 = nn.Linear(512, 3)
-#         self.fc3 = nn.Linear(128, 3)
 
     def forward(self, x):
         x = F.relu(self.conv11(x))
         x = self.pool(F.relu(self.conv12(x)))
+        
         x = F.relu(self.conv21(x))
         x = self.pool(F.relu(self.conv22(x)))
         
         x = self.pool(F.relu(self.conv31(x)))
         x = self.pool(F.relu(self.conv32(x)))
         
-        x = F.relu(self.conv41(x))
-        x = self.pool(F.relu(self.conv42(x)))
+        x = self.pool(F.relu(self.conv41(x)))
+        x = F.relu(self.conv42(x))
             
         x = torch.flatten(x, 1) # flatten all dimensions except batch
 #         print(x.shape)
         x = F.relu(self.fc1(x))
-#         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+

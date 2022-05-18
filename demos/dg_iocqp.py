@@ -145,10 +145,10 @@ class DiffQPController:
             x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
             # x_des = [0.5, 0.4, 0.7]
         else:
-            x_des = x_des_arr[1] 
-            x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
-            x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
-            # x_des = self.get_cube_pos(thread)
+            # x_des = x_des_arr[1] 
+            # x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
+            # x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
+            x_des = self.get_cube_pos(thread)
         # print(x_des)
         self.update_desired_position(x_des)
         
