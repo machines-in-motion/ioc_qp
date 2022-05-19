@@ -26,7 +26,7 @@ except:
 
 class IOCForwardPass:
 
-    def __init__(self, nn_dir, m, std, collect_data = False, vision_based = False):
+    def __init__(self, nn_dir, m, std, collect_data = False, vision_based = True):
         """
         Input:
             nn_dir : directory for NN weights
@@ -62,9 +62,9 @@ class IOCForwardPass:
         self.vision_based = vision_based
         if self.vision_based:
             self.cnet = C_Net()
-            self.cnet.load_state_dict(torch.load("../vision/models/cnn3", map_location=torch.device('cpu')))
-            self.c_mean = np.array([0.3186, 0.0425, 0.2636])
-            self.c_std = np.array([0.1430, 0.1926, 0.1375])
+            self.cnet.load_state_dict(torch.load("/home/ameduri/pydevel/ioc_qp/vision/models/cnn1", map_location=torch.device('cpu')))
+            self.c_mean = np.array([0.3060, 0.1720, 0.4036])
+            self.c_std = np.array([0.1408, 0.2329, 0.1644])
 
             self.camera = VisionSensor()
             self.camera.update(None)
@@ -110,9 +110,11 @@ class IOCForwardPass:
             c_image = ToTensor()((imread("." + "/color_" + str(1) + ".jpg")))
             d_image = ToTensor()((imread("." + "/depth_" + str(1) + ".jpg")))
             image = torch.vstack((c_image, d_image))
-            image = transforms.functional.crop(image, 0, 100, 150, 150)
+            image = transforms.functional.crop(image, 50, 100, 180, 180)
+
             image = image[None,:,:,:]
             pred = self.cnet(image)
+
         return (pred*self.c_std + self.c_mean).numpy()[0]
 
     def predict_rt(self, child_conn):
@@ -127,18 +129,18 @@ class IOCForwardPass:
             #     self.img_par.send((self.data, self.ctr))
             #     self.ctr += 1
 
-            # if self.vision_based:
-            #     self.color_image, self.depth_image = self.camera.get_image()
-            #     cv2.imwrite("." + "/color_" + str(1) + ".jpg", self.color_image)
-            #     cv2.imwrite("." + "/depth_" + str(1) + ".jpg", self.depth_image)
+            if self.vision_based:
+                self.color_image, self.depth_image = self.camera.get_image()
+                cv2.imwrite("." + "/color_" + str(1) + ".jpg", self.color_image)
+                cv2.imwrite("." + "/depth_" + str(1) + ".jpg", self.depth_image)
 
-            #     pred = self.predict_cnn()
-            #     pred[2] -= 0.15
-            #     pred[0] += 0.1
-            #     print(pred, x_des, np.linalg.norm(pred - x_des))
+                pred = self.predict_cnn()
+                # pred[2] -= 0.15
+                pred[0] += 0.1
+                print(pred, x_des, np.linalg.norm(pred - x_des))
 
             t1 = time.time()
-            x_pred = self.predict(q, dq, x_des)
+            x_pred = self.predict(q, dq, pred)
             t2 = time.time()
             child_conn.send((x_pred))
             # print("compute time", t2 - t1)
