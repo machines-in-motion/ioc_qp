@@ -50,7 +50,7 @@ if os.getlogin() == "ameduri" and use_nn:
 else:
     print("using qpnet")
     from vocam.qpnet import QPNet
-    nn_dir = "../models/qpnet_75.pt"
+    nn_dir = "../models/qpnet_89.pt"
     nn = QPNet(2*nq + 3, 2*n_vars).eval()
     nn.load(nn_dir)
 
