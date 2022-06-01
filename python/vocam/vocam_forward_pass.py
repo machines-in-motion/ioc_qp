@@ -61,6 +61,7 @@ class IOCForwardPass:
 
         self.vision_based = vision_based
         self.end_to_end = True
+
         if self.vision_based:
             self.cnet = C_Net_encoder()
             self.cnet.load_state_dict(torch.load("/home/ameduri/pydevel/ioc_qp/vision/models/cnn2", map_location=torch.device('cpu')))
@@ -71,7 +72,7 @@ class IOCForwardPass:
             self.camera.update(None)
         
         if self.end_to_end:
-            nn_dir = "../models/e2eNet1"
+            nn_dir = "../models/e2eNet2"
             self.encoder_net= QPNet(2*self.nq + 512, 2*self.n_vars).eval()
             self.encoder_net.load(nn_dir)
 
