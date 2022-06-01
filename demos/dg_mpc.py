@@ -68,7 +68,7 @@ n_col = 5
 n_vars = 3*nq*n_col+2*nq
 
 # nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_77.pt"
-nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_89.pt"
+nn_dir = "/home/ameduri/pydevel/ioc_qp/models/qpnet_91.pt"
 # nn_dir = "/home/ameduri/pydevel/ioc_qp/models/model2"
 
 ctrl = DiffQPController(head, pin_robot.model, pin_robot.data, nn_dir, m, std, vicon_name = "cube10/cube10", target = target, run_sim = run_sim)
@@ -102,7 +102,7 @@ if run_sim:
 
 else:
     thread_head.start()
-    # thread_head.start_logging(10, "test.mds")
+    # thread_head.start_logging(30, "test.mds")
     # time.sleep(30)
     # thread_head.plot_timing()
 

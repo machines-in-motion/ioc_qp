@@ -117,7 +117,7 @@ class DiffQPController:
         cube_pos, _ = thread.vicon.get_state(self.vicon_name)
         cube_pos = cube_pos[0:3]
         if np.linalg.norm(cube_pos) > 0:
-            cube_pos[0] += 0.1 
+            cube_pos[0] += 0.3 
             # cube_pos[2] -= 0.15
             self.prev_cube_pos = cube_pos
 
@@ -205,7 +205,11 @@ class DiffQPController:
         # for plotting
         pin.forwardKinematics(self.pinModel, self.pinData, q, v, np.zeros_like(q))
         pin.updateFramePlacements(self.pinModel, self.pinData)
-        self.ee_pos = self.pinData.oMf[self.f_id].translation
+        self.ee_pos = self.pinData.oMf[self.f_id].translation.copy()
+
+        pin.forwardKinematics(self.pinModel, self.pinData, self.q_des, self.dq_des, np.zeros_like(q))
+        pin.updateFramePlacements(self.pinModel, self.pinData)
+        self.ee_pos_des = self.pinData.oMf[self.f_id].translation
 
         self.head.set_control('ctrl_joint_torques', self.tau_in)        
         self.head.set_control('time_sent', np.array([thread.ti*1e-3]))

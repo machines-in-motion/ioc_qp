@@ -62,9 +62,9 @@ class IOCForwardPass:
         self.vision_based = vision_based
         if self.vision_based:
             self.cnet = C_Net()
-            self.cnet.load_state_dict(torch.load("/home/ameduri/pydevel/ioc_qp/vision/models/cnn1", map_location=torch.device('cpu')))
-            self.c_mean = np.array([0.3060, 0.1720, 0.4036])
-            self.c_std = np.array([0.1408, 0.2329, 0.1644])
+            self.cnet.load_state_dict(torch.load("/home/ameduri/pydevel/ioc_qp/vision/models/cnn2", map_location=torch.device('cpu')))
+            self.c_mean = np.array([0.3068, 0.1732, 0.4015])
+            self.c_std = np.array([0.1402, 0.2325, 0.1624])
 
             self.camera = VisionSensor()
             self.camera.update(None)
@@ -135,12 +135,12 @@ class IOCForwardPass:
                 cv2.imwrite("." + "/depth_" + str(1) + ".jpg", self.depth_image)
 
                 pred = self.predict_cnn()
-                # pred[2] -= 0.15
-                pred[0] += 0.1
-                print(pred, x_des, np.linalg.norm(pred - x_des))
+                pred[0] += 0.3
+                # print(pred, x_des, np.linalg.norm(pred - x_des))
+                x_des = pred
 
             t1 = time.time()
-            x_pred = self.predict(q, dq, pred)
+            x_pred = self.predict(q, dq, x_des)
             t2 = time.time()
             child_conn.send((x_pred))
             # print("compute time", t2 - t1)
