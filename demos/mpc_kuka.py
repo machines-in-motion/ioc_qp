@@ -29,7 +29,7 @@ x_init = np.zeros(14)
 nq = 7
 dt = 0.05
 n_col = 5
-u_max = [3.5,4.5,2.5, 2.5, 1.5, 1.5, 1.0]
+u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
 n_vars = 3*nq*n_col+2*nq
 
 # loading forward pass class
@@ -50,7 +50,7 @@ if os.getlogin() == "ameduri" and use_nn:
 else:
     print("using qpnet")
     from vocam.qpnet import QPNet
-    nn_dir = "../models/qpnet_75.pt"
+    nn_dir = "../models/qpnet_89.pt"
     nn = QPNet(2*nq + 3, 2*n_vars).eval()
     nn.load(nn_dir)
 
