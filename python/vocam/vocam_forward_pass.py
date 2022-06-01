@@ -15,7 +15,7 @@ from multiprocessing import Process, Pipe
 from skimage.io import imread
 
 from vocam.diff_qp import DiffQP
-from vocam.nets import C_Net, Net
+from vocam.nets import C_Net, Net, C_Net_encoder
 from vocam.inverse_qp import IOC
 from vocam.qpnet import QPNet
 
@@ -60,8 +60,9 @@ class IOCForwardPass:
             self.no_norm = True
 
         self.vision_based = vision_based
+        self.end_to_end = True
         if self.vision_based:
-            self.cnet = C_Net()
+            self.cnet = C_Net_encoder()
             self.cnet.load_state_dict(torch.load("/home/ameduri/pydevel/ioc_qp/vision/models/cnn2", map_location=torch.device('cpu')))
             self.c_mean = np.array([0.3068, 0.1732, 0.4015])
             self.c_std = np.array([0.1402, 0.2325, 0.1624])
@@ -69,6 +70,11 @@ class IOCForwardPass:
             self.camera = VisionSensor()
             self.camera.update(None)
         
+        if self.end_to_end:
+            nn_dir = "../models/e2eNet1"
+            self.encoder_net= QPNet(2*self.nq + 512, 2*self.n_vars).eval()
+            self.encoder_net.load(nn_dir)
+
         self.collect_data = collect_data
         if self.collect_data:
             self.data = {"color_image": [], "depth_image": [], "position": []}
@@ -104,7 +110,7 @@ class IOCForwardPass:
         x_pred = x_pred.detach().numpy()
 
         return x_pred
-    
+
     def predict_cnn(self):
         with torch.no_grad():
             c_image = ToTensor()((imread("." + "/color_" + str(1) + ".jpg")))
@@ -113,9 +119,28 @@ class IOCForwardPass:
             image = transforms.functional.crop(image, 50, 100, 180, 180)
 
             image = image[None,:,:,:]
-            pred = self.cnet(image)
+            pred, enc = self.cnet(image)
 
-        return (pred*self.c_std + self.c_mean).numpy()[0]
+        return (pred*self.c_std + self.c_mean).numpy()[0], enc
+
+    def predict_encoder(self, q, dq, encoding):
+        
+        nq = self.ioc.nq
+        n_vars = self.ioc.n_vars
+        state = np.zeros(2*nq)
+        state[0:nq] = q
+        state[nq:] = dq
+        
+        x_in = torch.hstack((torch.tensor(state)[None,], encoding)).float()
+        pred = torch.squeeze(self.encoder_net(x_in))
+        n_vars = self.ioc.n_vars
+        self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
+        self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
+
+        x_pred = self.ioc(state) 
+        x_pred = x_pred.detach().numpy()
+
+        return x_pred
 
     def predict_rt(self, child_conn):
         while True:
@@ -134,17 +159,21 @@ class IOCForwardPass:
                 cv2.imwrite("." + "/color_" + str(1) + ".jpg", self.color_image)
                 cv2.imwrite("." + "/depth_" + str(1) + ".jpg", self.depth_image)
 
-                pred = self.predict_cnn()
+                pred, enc = self.predict_cnn()
                 pred[0] += 0.3
                 # print(pred, x_des, np.linalg.norm(pred - x_des))
                 x_des = pred
 
-            t1 = time.time()
-            x_pred = self.predict(q, dq, x_des)
-            t2 = time.time()
+            if self.end_to_end and self.vision_based:
+                x_pred = self.predict_encoder(q, dq, enc)
+                
+            else:
+                t1 = time.time()
+                x_pred = self.predict(q, dq, x_des)
+                t2 = time.time()
+            
             child_conn.send((x_pred))
             # print("compute time", t2 - t1)
-
 
 def rt_IOCForwardPass(channel, nn_dir, mean, std):
     planner = IOCForwardPass(nn_dir, mean, std)

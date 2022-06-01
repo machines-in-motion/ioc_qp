@@ -63,6 +63,19 @@ class IOCForwardPassWithoutVision:
 
         return x_pred
 
+    def predict_encoder(self, state, encoding):
+
+        x_in = torch.hstack((torch.tensor(state)[None,], encoding)).float()
+        pred = torch.squeeze(self.nn(x_in))
+        n_vars = self.ioc.n_vars
+        self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
+        self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
+
+        x_pred = self.ioc(state) 
+        x_pred = x_pred.detach().numpy()
+
+        return x_pred
+
     def predict_rt(self, child_conn):
         while True:
             q, dq, x_des = child_conn.recv()
