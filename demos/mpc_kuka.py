@@ -29,7 +29,7 @@ x_init = np.zeros(14)
 nq = 7
 dt = 0.05
 n_col = 5
-u_max = [3.5,4.5,2.5, 2.5, 1.5, 1.5, 1.0]
+u_max = [2.5,2.5,2.5, 1.5, 1.5, 1.5, 1.0]
 n_vars = 3*nq*n_col+2*nq
 
 # loading forward pass class
