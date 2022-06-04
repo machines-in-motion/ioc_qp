@@ -102,7 +102,7 @@ if run_sim:
 
 else:
     thread_head.start()
-    thread_head.start_logging(30, "test.mds")
+    # thread_head.start_logging(30, "test.mds")
     # time.sleep(30)
     # thread_head.plot_timing()
 
