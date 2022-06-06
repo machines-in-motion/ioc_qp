@@ -26,48 +26,6 @@ import numpy as np
 
 pin_robot = IiwaConfig.buildRobotWrapper()
 
-class C_Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv11 = nn.Conv2d(4, 64, 3)
-        self.conv12 = nn.Conv2d(64, 64, 3)
-
-        self.pool = nn.MaxPool2d(2, 2)
-        
-        self.conv21 = nn.Conv2d(64, 128, 3)
-        self.conv22 = nn.Conv2d(128, 128, 3)
-
-        self.conv31 = nn.Conv2d(128, 256, 3)
-        self.conv32 = nn.Conv2d(256, 256, 3)
-        self.conv33 = nn.Conv2d(256, 256, 3)
-
-        
-        self.conv41 = nn.Conv2d(256, 512, 3)
-        self.conv42 = nn.Conv2d(512, 512, 3)
-        
-        self.fc1 = nn.Linear(512, 512)
-        self.fc3 = nn.Linear(512, 3)
-
-    def forward(self, x):
-        x = F.relu(self.conv11(x))
-        x = self.pool(F.relu(self.conv12(x)))
-        
-        x = F.relu(self.conv21(x))
-        x = self.pool(F.relu(self.conv22(x)))
-        
-        x = self.pool(F.relu(self.conv31(x)))
-        x = self.pool(F.relu(self.conv32(x)))
-        
-        x = self.pool(F.relu(self.conv41(x)))
-        x = F.relu(self.conv42(x))
-            
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
-#         print(x.shape)
-        x = F.relu(self.fc1(x))
-        x = self.fc3(x)
-        return x
-
-
 class ConstantTorque:
     def __init__(self, head, robot_model, robot_data):
         self.head = head
@@ -83,16 +41,10 @@ class ConstantTorque:
         self.parent_conn, self.child_conn = Pipe()
         self.data = {"color_image": [], "depth_image": [], "position": []}
         
-        # self.cnet = C_Net()
-        # self.cnet.load_state_dict(torch.load("./models/cnn1", map_location=torch.device('cpu')))
-        # self.mean = np.array([0.3060, 0.1720, 0.4036])
-        # self.std = np.array([0.1408, 0.2329, 0.1644])
-
-
     def warmup(self, thread_head):
-        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data9", 10.0, self.child_conn))
+        self.subp = Process(target=ImageLogger, args=(["color_image", "depth_image", "position"], "data15", 10.0, self.child_conn))
         self.subp.start()
-        self.init = self.joint_positions.copy()
+        self.init_pos = self.joint_positions.copy()
 
         pass
 
@@ -124,27 +76,35 @@ class ConstantTorque:
         self.data["depth_image"] = self.depth_image
         self.data["position"] = pos[0:3]
         self.parent_conn.send((self.data, thread.ti))
+        # box = ToPILImage()(self.image[0][0:3])
+        # opencvImage = cv2.cvtColor(np.array(box), cv2.COLOR_RGB2BGR)
 
-        box = ToPILImage()(self.image[0][0:3])
-        opencvImage = cv2.cvtColor(np.array(box), cv2.COLOR_RGB2BGR)
-
-        cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-        cv2.imshow('RealSense', opencvImage)
-        cv2.waitKey(1)
+        # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+        # cv2.imshow('RealSense', opencvImage)
+        # cv2.waitKey(1)
 
         ti = thread.ti
-        self.des_position = self.init.copy()
-        self.des_position[0] += 0.2*np.sin(0.001*np.pi*ti)
-        self.des_position[1] += 0.2*np.sin(0.001*np.pi*ti)
+        self.Kp = np.array([10.0, 10.0, 3.0, 1.0, 1.0, 1.0, 1.0])
+        self.Kd = np.array([2.5, 2.5, 2.5, 2.5, 2.5, 0.5, 0.5])
+
+        self.des_position = self.init_pos.copy()   
+        self.des_position[0] = 0.3*np.sin(4.5*np.pi*thread.ti/1000.) + np.pi/18
+        self.des_position[2] = 0.35*np.sin(5.5*np.pi*thread.ti/1000. + np.pi/5.0) + self.init_pos[2]  
+        self.des_position[3] = 0.45*np.cos(4.5*np.pi*thread.ti/1000. + np.pi/3.0) + 1.6*self.init_pos[3]  
+        self.des_position[4] = 0.2*np.sin(3.5*np.pi*thread.ti/1000. + np.pi/7.0) + self.init_pos[4]  
         self.tau = (
-            40 * (self.des_position - self.joint_positions)
-            - 0.5 * self.joint_velocities
+            self.Kp * (self.des_position - self.joint_positions)
+            - self.Kd * self.joint_velocities
         )
+
+        self.tau = np.clip(self.tau, -15, 15)
+
         pin.forwardKinematics(self.pinModel, self.pinData, q, v, np.zeros_like(q))
         pin.updateFramePlacements(self.pinModel, self.pinData)
         
         self.g_comp = pin.rnea(self.pinModel, self.pinData, q, v, np.zeros_like(q))
         self.head.set_control('ctrl_joint_torques', self.tau)
+        self.head.set_control('desired_joint_positions', self.des_position)
 
         t2 = time.time()
 
