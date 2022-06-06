@@ -33,6 +33,41 @@ class IOCForwardPassWithoutVision:
         self.std = std
         self.n_vars = self.ioc.n_vars
         self.nn = nn
+
+    def predict_obstacle(self, q, dq, x_des, obstacle=True):
+
+        nq = self.ioc.nq
+        n_vars = self.ioc.n_vars
+        state = np.zeros(2*nq)
+        state[0:nq] = q
+        state[nq:] = dq
+
+        if obstacle:
+            x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des), 0.4 * torch.ones(3))).float()
+        else:
+            x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des), 0.05 * torch.zeros(3))).float()
+
+        
+        pred_norm = self.nn(x_input)
+        if torch.is_tensor(self.std):
+            pred = pred_norm * self.std + self.m
+        else:
+            pred = pred_norm
+        
+        pred = torch.squeeze(pred)
+
+        # # if not self.ioc.isvec:
+        #     self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
+        #     self.ioc.x_nom = torch.nn.Parameter(pred[n_vars**2:])
+        # else:
+        self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
+        self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
+
+        x_pred = self.ioc(state)
+        x_pred = x_pred.detach().numpy()
+
+
+        return x_pred
         
     def predict(self, q, dq, x_des):
 
@@ -42,6 +77,7 @@ class IOCForwardPassWithoutVision:
         state[0:nq] = q
         state[nq:] = dq
         x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des))).float()
+        
         pred_norm = self.nn(x_input)
         if torch.is_tensor(self.std):
             pred = pred_norm * self.std + self.m
