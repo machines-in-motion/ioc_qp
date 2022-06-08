@@ -17,7 +17,7 @@ from skimage.io import imread
 from vocam.diff_qp import DiffQP
 from vocam.nets import C_Net, Net, C_Net_encoder
 from vocam.inverse_qp import IOC
-from vocam.qpnet import QPNet
+from vocam.qpnet import QPNet, QPNetObstacle
 
 try:
     from dynamic_graph_head import ImageLogger, VisionSensor
@@ -48,20 +48,22 @@ class IOCForwardPass:
         self.mean = m
         self.std = std
         self.n_vars = self.ioc.n_vars
-        try:
-            self.nn = Net(2*self.nq + 3, 2*self.n_vars)
-            self.nn.load_state_dict(torch.load(nn_dir))
-            self.no_norm = False
-            print("using nn")
-        except:
+        
+        self.vision_based = False
+        self.end_to_end = False
+        self.obstacle_based = False
+
+        if not self.obstacle_based:
             print("using qp net")
             self.nn = QPNet(2*self.nq + 3, 2*self.n_vars).eval()
             self.nn.load(nn_dir)
             self.no_norm = True
-
-        self.vision_based = vision_based
-        self.end_to_end = True
-
+        else:
+            print("using obstacle qp net")
+            self.obs_nn = QPNetObstacle(2*self.nq + 3, 2*self.n_vars, 3).eval()
+            self.obs_nn.load(nn_dir)
+            self.no_norm = True
+            
         if self.vision_based:
             self.cnet = C_Net_encoder()
             self.cnet.load_state_dict(torch.load("/home/ameduri/pydevel/ioc_qp/vision/models/cnn4", map_location=torch.device('cpu')))
@@ -143,6 +145,40 @@ class IOCForwardPass:
 
         return x_pred
 
+    def predict_obstacle(self, q, dq, x_des, obstacle=True):
+
+        nq = self.ioc.nq
+        n_vars = self.ioc.n_vars
+        state = np.zeros(2*nq)
+        state[0:nq] = q
+        state[nq:] = dq
+
+        if obstacle:
+            x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des), 0.45 * torch.ones(3))).float()
+        else:
+            x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des), 0.05 * torch.zeros(3))).float()
+
+        pred_norm = self.obs_nn(x_input)
+        if torch.is_tensor(self.std):
+            pred = pred_norm * self.std + self.m
+        else:
+            pred = pred_norm
+
+        pred = torch.squeeze(pred)
+
+        # # if not self.ioc.isvec:
+        #     self.ioc.weight = torch.nn.Parameter(torch.reshape(pred[0:n_vars**2], (n_vars, n_vars)))
+        #     self.ioc.x_nom = torch.nn.Parameter(pred[n_vars**2:])
+        # else:
+        self.ioc.weight = torch.nn.Parameter(pred[0:n_vars])
+        self.ioc.x_nom = torch.nn.Parameter(pred[n_vars:])
+
+        x_pred = self.ioc(state)
+        x_pred = x_pred.detach().numpy()
+
+
+        return x_pred
+
     def predict_rt(self, child_conn):
         while True:
             q, dq, x_des = child_conn.recv()
@@ -162,16 +198,21 @@ class IOCForwardPass:
 
                 pred, enc = self.predict_cnn()
                 pred[0] += 0.3
-                print(pred, x_des, np.linalg.norm(pred - x_des))
+                # print(pred, x_des, np.linalg.norm(pred - x_des))
                 x_des = pred
 
             if self.end_to_end and self.vision_based:
                 x_pred = self.predict_encoder(q, dq, enc)
                 
             else:
-                t1 = time.time()
-                x_pred = self.predict(q, dq, x_des)
-                t2 = time.time()
+                if self.obstacle_based:
+                    print(x_des)
+                    x_pred = self.predict_obstacle(q, dq, x_des, obstacle=True)
+                else:
+                    t1 = time.time()
+                    # print(x_des)
+                    x_pred = self.predict(q, dq, x_des)
+                    t2 = time.time()
             
             child_conn.send((x_pred))
             # print("compute time", t2 - t1)
