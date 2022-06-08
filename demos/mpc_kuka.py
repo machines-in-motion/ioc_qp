@@ -49,12 +49,12 @@ if os.getlogin() == "ameduri" and use_nn:
 
 else:
     print("using qpnet")
-    from vocam.qpnet import QPNet
-    nn_dir = "../models/qpnet_89.pt"
-    nn = QPNet(2*nq + 3, 2*n_vars).eval()
+    from vocam.qpnet import QPNet, QPNetObstacle
+    nn_dir = "../models/qpnet_obstacle124.pt"
+    nn = QPNetObstacle(2*nq + 3, 2*n_vars, 3).eval()
     nn.load(nn_dir)
 
-    x_train = torch.load("../data/x_train8.pt")
+    x_train = torch.load("../data/x_train100.pt")
 
     # data_train = torch.load("../data/data_100_50.pt")
     # unzipped = list(zip(*data_train))
@@ -87,7 +87,7 @@ robot.reset_robot(q_init, v_init)
 count = 0
 state = np.zeros(2*nq)
 eps = 15
-nb_switches = 5
+nb_switches = 10
 count = 0
 pln_freq = n_col - 2
 lag = 1
@@ -100,19 +100,22 @@ for v in range(nb_switches*n_col*eps) :
     q, dq = robot.get_state()
 
     if v % (n_col*eps) == 0:
-        x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        randint = np.random.randint(2)
+        obstacle = randint
+        x_des = x_train[200*randint][-3:].detach().numpy()
         p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
         robot.plan.append(1)
     
     if v == 0:
-        x_pred = iocfp.predict(q, dq, x_des)    
+        x_pred = iocfp.predict_obstacle(q, dq, x_des, obstacle)    
     
     q_des = x_pred[count*3*nq:count*3*nq+nq]
     dq_des = x_pred[count*3*nq+nq:count*3*nq+2*nq]
     a_des = x_pred[count*3*nq + 2*nq:count*3*nq+3*nq]
 
     if count == pln_freq and not rt:
-        x_pred_wait = iocfp.predict(q, dq, x_des)
+
+        x_pred_wait = iocfp.predict_obstacle(q, dq, x_des, obstacle)
         robot.plan.append(1)
     
     if count == pln_freq + lag:
