@@ -143,3 +143,67 @@ def test(network, criterion, dataloader, device):
     return np.mean(all_loss)
 
     
+class QPNet(nn.Module):
+    def __init__(self, input_size, output_size):
+        # game params
+        super().__init__()
+        
+        self.swish = nn.SiLU()
+        self.fc1 = nn.Linear(input_size, 512)
+        self.bn1 = nn.BatchNorm1d(512)
+
+        self.fc2 = nn.Linear(512, 1024)
+        self.bn2 = nn.BatchNorm1d(1024)
+
+        self.fc3 = nn.Linear(1024, 512)
+        self.bn3 = nn.BatchNorm1d(512)
+
+        self.dropout = nn.Dropout(p=0.5)
+
+        self.out = nn.Linear(512, output_size)
+        
+    def forward(self, x):
+        if len(x.shape) == 1:
+            x = x[None, :]
+        x = self.swish(self.bn1(self.fc1(x)))
+        x = self.dropout(self.swish(self.bn2(self.fc2(x)))) 
+        x = self.swish(self.bn3(self.fc3(x)))
+        x = self.out(x)
+
+        return x
+
+    def save(self, path):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path, device='cpu'):
+        self.load_state_dict(torch.load(path, map_location=torch.device(device)))
+
+
+class QPNetObstacle(QPNet):
+    def __init__(self, input_size, output_size, obstacle_size):
+        super().__init__(input_size, output_size)
+        self.fc1_obs = nn.Linear(obstacle_size, 512)
+        self.bn1_obs = nn.BatchNorm1d(512)
+        self.fc2_obs = nn.Linear(512, 512)
+        self.bn2_obs = nn.BatchNorm1d(512)
+
+        self.fc1 = nn.Linear(input_size + 512, 512)
+        self.bn1 = nn.BatchNorm1d(512)
+
+        self.input_size = input_size
+        self.obstacle_size = obstacle_size
+
+    def forward(self, x):
+        if len(x.shape) == 1:
+            x = x[None, :]
+        obs = x[:, self.input_size:]
+        obs = self.swish(self.bn1_obs(self.fc1_obs(obs)))
+        obs = self.dropout(self.swish(self.bn2_obs(self.fc2_obs(obs))))
+
+        x = torch.hstack((x[:, :self.input_size], obs))
+        x = self.swish(self.bn1(self.fc1(x)))
+        x = self.dropout(self.swish(self.bn2(self.fc2(x)))) 
+        x = self.swish(self.bn3(self.fc3(x)))
+        x = self.out(x)
+
+        return x

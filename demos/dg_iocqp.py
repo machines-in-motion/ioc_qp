@@ -104,6 +104,8 @@ class DiffQPController:
             self.prev_cube_pos,  _ = thread.vicon.get_state(self.vicon_name)
             self.prev_cube_pos = self.prev_cube_pos[0:3]
 
+        self.op = 0
+
     def update_desired_position(self, x_des):
         self.x_des = x_des
         if self.target:
@@ -118,7 +120,7 @@ class DiffQPController:
         cube_pos = cube_pos[0:3]
         if np.linalg.norm(cube_pos) > 0:
             cube_pos[0] += 0.3 
-            # cube_pos[2] -= 0.15
+            # cube_pos[1] -= 0.1
             self.prev_cube_pos = cube_pos
 
         else:
@@ -140,15 +142,24 @@ class DiffQPController:
         v = self.joint_velocities.copy()
 
         if not self.vicon_name or self.run_sim:
-            x_des = x_des_arr[1] 
-            x_des[1] = 0.2*np.sin(0.0005*thread.ti) + 0.3
-            x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
-            # x_des = [0.5, 0.4, 0.7]
+            x_des_tmp = np.array([[0.514, 0.3518, 0.1539], [0.5122, -0.3506,  0.1529]])
+            if thread.ti % (7*1000) == 0:
+                if self.op == 0:
+                    self.op = 1
+                else:
+                    self.op = 0
+            x_des = x_des_tmp[self.op]
         else:
-            # x_des = x_des_arr[1] 
-            # x_des[1] = 0.3*np.sin(0.0005*thread.ti) + 0.3
-            # x_des[2] = 0.0*np.cos(0.0002*thread.ti) + 0.5
+            # x_des_tmp = np.array([[0.4094, -0.3638,  0.1958], [0.5066, 0.2694, 0.1690]])
+            # if thread.ti % (15*1000) == 0:
+            #     if self.op == 0:
+            #         self.op = 1
+            #     else:
+            #         self.op = 0
+            # x_des = x_des_tmp[self.op]
+
             x_des = self.get_cube_pos(thread)
+        
         # print(x_des)
         self.update_desired_position(x_des)
         
@@ -211,6 +222,7 @@ class DiffQPController:
         pin.updateFramePlacements(self.pinModel, self.pinData)
         self.ee_pos_des = self.pinData.oMf[self.f_id].translation
 
-        self.head.set_control('ctrl_joint_torques', self.tau_in)        
-        self.head.set_control('time_sent', np.array([thread.ti*1e-3]))
-        self.head.set_control('desired_joint_positions', self.q_des)
+        self.head.set_control('ctrl_joint_torques', self.tau_in)     
+        if not self.run_sim:   
+            self.head.set_control('time_sent', np.array([thread.ti*1e-3]))
+            self.head.set_control('desired_joint_positions', self.q_des)
