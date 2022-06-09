@@ -50,7 +50,7 @@ if os.getlogin() == "ameduri" and use_nn:
 else:
     print("using qpnet")
     from vocam.qpnet import QPNet, QPNetObstacle
-    nn_dir = "../models/qpnet_obstacle124.pt"
+    nn_dir = "../models/qpnet_obstacle157.pt"
     nn = QPNetObstacle(2*nq + 3, 2*n_vars, 3).eval()
     nn.load(nn_dir)
 
@@ -101,7 +101,7 @@ for v in range(nb_switches*n_col*eps) :
 
     if v % (n_col*eps) == 0:
         randint = np.random.randint(2)
-        obstacle = randint
+        obstacle = 1 - randint
         x_des = x_train[200*randint][-3:].detach().numpy()
         p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
         robot.plan.append(1)
