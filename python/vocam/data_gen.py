@@ -30,14 +30,14 @@ def generate_obstacle(n_tasks, task_loss, robot, config, viz=None):
         else:
             r = config.r_range[0] + (config.r_range[1]-config.r_range[0])*np.random.rand()
             if np.random.randint(2) == 0:
-                th = 0.1*np.pi*(np.random.rand()) + 0.25*np.pi
+                th = 0.15*np.pi*(np.random.rand()) + 0.2*np.pi
             else:
-                th = 0.1*np.pi*(np.random.rand()) + 0.65*np.pi
-        
-            goal = torch.tensor([r*np.sin(th), r*np.cos(th), 0.15*np.random.rand()+0.15])
+                th = 0.15*np.pi*(np.random.rand()) + 0.65*np.pi
+            z = config.z_range[0] + (config.z_range[1]-config.z_range[0])*np.random.rand()
+            goal = torch.tensor([r*np.sin(th), r*np.cos(th), z])
             
-        
-        if restart or np.random.randint(config.n_restart) == 0:
+        restart = restart or (np.random.randint(config.n_restart) == 0)
+        if restart:
             # generate random robot configuration
             x_init = np.array(config.x_init)
             x_init[:nq] += config.q_noise * (np.random.rand(nv) - 0.5)
@@ -47,7 +47,7 @@ def generate_obstacle(n_tasks, task_loss, robot, config, viz=None):
 
             # generate obstacles (for now only one fixed obstacle)
             obs_rad = np.array(config.obs_rad)
-            obs_height = np.random.choice([0.55, 0.55, 0.55, 0.55]) + np.random.rand()*0.05
+            obs_height = np.random.choice([0.55, 0.55]) + np.random.rand()*0.05
             obs_rad[2] = obs_height
 
             obs_pos_arr = []
@@ -99,7 +99,7 @@ def generate_obstacle(n_tasks, task_loss, robot, config, viz=None):
             if j == 0:
                 A, B = ee_pos[1], goal.detach().numpy()[1]
                 threshold = -B / (A-B)
-                crossing = (threshold > 0)
+                crossing = (threshold > 0 and not restart)
                 crossed = False
                 via_point = np.zeros(3)
                 via_point[:2] = threshold*ee_pos[:2] + (1-threshold)*goal.detach().numpy()[:2]
@@ -149,11 +149,11 @@ def generate_obstacle(n_tasks, task_loss, robot, config, viz=None):
         ee_pos = robot.data.oMf[config.f_id].translation
         dist = np.linalg.norm(ee_pos - goal.detach().numpy())
 
-        dist_obs = ee_pos - obs_pos_arr[0].detach().numpy()
+        dist_obs = goal - obs_pos_arr[0].detach().numpy()
         A = np.diag(1 / (obs_rad ** 2))
         sd_ellipsoid = np.sqrt(dist_obs @ A @ dist_obs) - 1.0
         
-        if dist <= config.distance_threshold or sd_ellipsoid < 0:
+        if dist <= config.distance_threshold:
             # only store successful task executions
             X.append(Xi)
             Y.append(Yi)

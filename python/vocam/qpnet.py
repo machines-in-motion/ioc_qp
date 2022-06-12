@@ -37,7 +37,7 @@ class DataUtils(object):
         start = task_idx * task_horizon
         end = start + task_horizon
         q = self.x_train[start:end, :self.config.nq].detach().cpu().numpy()
-        goal = self.x_train[start, -3:].detach().cpu().numpy()
+        goal = self.x_train[start, -6:-3].detach().cpu().numpy()
         if self.viz is not None:
             self.viz.display(q[0])
             self.viz.viewer["box"].set_object(g.Sphere(0.05), 

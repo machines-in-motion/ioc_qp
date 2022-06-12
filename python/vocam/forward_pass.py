@@ -43,7 +43,7 @@ class IOCForwardPassWithoutVision:
         state[nq:] = dq
 
         if obstacle:
-            x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des), 0.45 * torch.ones(3))).float()
+            x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des), 0.5 * torch.ones(3))).float()
         else:
             x_input = torch.hstack((torch.tensor(state), torch.tensor(x_des), 0.05 * torch.zeros(3))).float()
 

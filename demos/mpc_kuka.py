@@ -50,8 +50,8 @@ if os.getlogin() == "ameduri" and use_nn:
 else:
     print("using qpnet")
     from vocam.qpnet import QPNet, QPNetObstacle
-    nn_dir = "../models/qpnet_obstacle157.pt"
-    nn = QPNetObstacle(2*nq + 3, 2*n_vars, 3).eval()
+    nn_dir = "../models/qpnet_obstacle207.pt"
+    nn = QPNet(2*nq + 3, 2*n_vars).eval()
     nn.load(nn_dir)
 
     x_train = torch.load("../data/x_train100.pt")
@@ -107,7 +107,7 @@ for v in range(nb_switches*n_col*eps) :
         robot.plan.append(1)
     
     if v == 0:
-        x_pred = iocfp.predict_obstacle(q, dq, x_des, obstacle)    
+        x_pred = iocfp.predict(q, dq, x_des)    
     
     q_des = x_pred[count*3*nq:count*3*nq+nq]
     dq_des = x_pred[count*3*nq+nq:count*3*nq+2*nq]
@@ -115,7 +115,7 @@ for v in range(nb_switches*n_col*eps) :
 
     if count == pln_freq and not rt:
 
-        x_pred_wait = iocfp.predict_obstacle(q, dq, x_des, obstacle)
+        x_pred_wait = iocfp.predict(q, dq, x_des)
         robot.plan.append(1)
     
     if count == pln_freq + lag:
