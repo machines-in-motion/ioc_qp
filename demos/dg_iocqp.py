@@ -150,17 +150,18 @@ class DiffQPController:
                     self.op = 0
             x_des = x_des_tmp[self.op]
         else:
-            # x_des_tmp = np.array([[0.4094, -0.3638,  0.1958], [0.5066, 0.2694, 0.1690]])
-            # if thread.ti % (15*1000) == 0:
+            # x_des_tmp = np.array([[0.5094, -0.3838,  0.158], [0.5066, 0.3894, 0.1590]])
+            # if thread.ti % (4.5*1000) == 0:
             #     if self.op == 0:
             #         self.op = 1
             #     else:
             #         self.op = 0
-            # x_des = x_des_tmp[self.op]
+    
+            # x_des = x_des_tmp[self.op] + 0.02*np.random.rand(3)
 
-            x_des = self.get_cube_pos(thread)
-        
-        # print(x_des)
+            x_des = self.get_cube_pos(thread) #+ 0.02*np.random.rand(3)
+
+        print(x_des)
         self.update_desired_position(x_des)
         
         if thread.ti % int(self.dt*1000) == 0:
