@@ -17,37 +17,46 @@ def generate_obstacle(n_tasks, task_loss, robot, config, viz=None):
     n_obs = config.n_obs
     X = []
     Y = []
+    restart = True
 
     for i in trange(n_tasks):
         # generate random goal location
-        r = 0.3*np.random.rand() + 0.5
-        if np.random.randint(2) == 0:
-            theta = 0.1*np.pi*(np.random.rand()) + 0.25*np.pi
+        if False:
+            r = config.r_range[0] + (config.r_range[1]-config.r_range[0])*np.random.rand()
+            z = config.z_range[0] + (config.z_range[1]-config.z_range[0])*np.random.rand()
+            th = config.th_range[0] + (config.th_range[1]-config.th_range[0])*np.random.rand()
+            goal = torch.tensor([r*np.sin(th), r*np.cos(th), z])
+
         else:
-            theta = 0.1*np.pi*(np.random.rand()) + 0.65*np.pi
-    
-        goal = torch.tensor([r*np.sin(theta), r*np.cos(theta), 0.15*np.random.rand()+0.15])
-
-        # generate obstacles (for now only one fixed obstacle)
-        obs_rad = np.array(config.obs_rad)
-        obs_height = config.obs_rad[2] * np.random.rand()
-        obs_rad[2] = obs_height
-
-        obs_pos_arr = []
-        for l in range(n_obs):
-            r = 0.0*np.random.rand() + 0.5
-            theta = 0.0*np.pi*(np.random.rand() - 0.5) + 0.5*np.pi
-            ht = 0.0*np.random.rand() 
-            obs_pos = torch.tensor([r*np.sin(theta), r*np.cos(theta), ht])
-            obs_pos_arr.append(obs_pos)
-        
-        # generate random robot configuration
-        if i == 0 or np.random.randint(config.n_restart) == 0:
+            r = config.r_range[0] + (config.r_range[1]-config.r_range[0])*np.random.rand()
+            if np.random.randint(2) == 0:
+                th = 0.15*np.pi*(np.random.rand()) + 0.2*np.pi
+            else:
+                th = 0.15*np.pi*(np.random.rand()) + 0.65*np.pi
+            z = config.z_range[0] + (config.z_range[1]-config.z_range[0])*np.random.rand()
+            goal = torch.tensor([r*np.sin(th), r*np.cos(th), z])
+            
+        restart = restart or (np.random.randint(config.n_restart) == 0)
+        if restart:
+            # generate random robot configuration
             x_init = np.array(config.x_init)
             x_init[:nq] += config.q_noise * (np.random.rand(nv) - 0.5)
             x_init[nq:] = config.dq_noise * (np.random.rand(nv) - 0.5)
             x_init[0] -= 2*0.5*(np.random.rand() - 0.5)
             x_init[2] -= 2*0.3*(np.random.rand() - 0.5)
+
+            # generate obstacles (for now only one fixed obstacle)
+            obs_rad = np.array(config.obs_rad)
+            obs_height = np.random.choice([0.55, 0.55]) + np.random.rand()*0.05
+            obs_rad[2] = obs_height
+
+            obs_pos_arr = []
+            for l in range(n_obs):
+                r = 0.0*np.random.rand() + 0.5
+                th = 0.0*np.pi*(np.random.rand() - 0.5) + 0.5*np.pi
+                ht = 0.0*np.random.rand() 
+                obs_pos = torch.tensor([r*np.sin(th), r*np.cos(th), ht])
+                obs_pos_arr.append(obs_pos)
         
         # visualization
         if viz is not None:
@@ -81,10 +90,34 @@ def generate_obstacle(n_tasks, task_loss, robot, config, viz=None):
             if j >= 1:
                 x_init = x_pred[-2 * nq:]
 
+            q = x_init[:nq]
+            dq = x_init[nq:]
+            pin.forwardKinematics(robot.model, robot.data, q, dq, np.zeros(nv))
+            pin.updateFramePlacements(robot.model, robot.data)
+            ee_pos = robot.data.oMf[config.f_id].translation
+
+            if j == 0:
+                A, B = ee_pos[1], goal.detach().numpy()[1]
+                threshold = -B / (A-B)
+                crossing = (threshold > 0 and not restart)
+                crossed = False
+                via_point = np.zeros(3)
+                via_point[:2] = threshold*ee_pos[:2] + (1-threshold)*goal.detach().numpy()[:2]
+                via_point[2] = obs_height + 0.05                   
+
+            progress = (ee_pos[1] - B)/(A-B)
+            if (progress > threshold
+                and crossing
+                and not crossed):
+                goal_temp = torch.tensor(via_point)
+            else:
+                goal_temp = goal.clone()
+                crossed = True
+
             old_loss = torch.inf
             for _ in range(config.max_it):
                 x_pred = ioc(x_init) 
-                loss = task_loss(x_pred, goal, obs_pos_arr, obs_rad, config)
+                loss = task_loss(x_pred, goal_temp, obs_pos_arr, obs_rad, config)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -113,14 +146,22 @@ def generate_obstacle(n_tasks, task_loss, robot, config, viz=None):
         dq = x_pred[-nq:]
         pin.forwardKinematics(robot.model, robot.data, q, dq, np.zeros(nv))
         pin.updateFramePlacements(robot.model, robot.data)
-        dist = np.linalg.norm(robot.data.oMf[config.f_id].translation - goal.detach().numpy())
+        ee_pos = robot.data.oMf[config.f_id].translation
+        dist = np.linalg.norm(ee_pos - goal.detach().numpy())
+
+        dist_obs = goal - obs_pos_arr[0].detach().numpy()
+        A = np.diag(1 / (obs_rad ** 2))
+        sd_ellipsoid = np.sqrt(dist_obs @ A @ dist_obs) - 1.0
         
         if dist <= config.distance_threshold:
             # only store successful task executions
             X.append(Xi)
             Y.append(Yi)
+            restart = False
         else:
             print(dist)
+            print(sd_ellipsoid)
+            restart = True
 
     x_train = torch.vstack(X)
     y_train = torch.vstack(Y)
@@ -136,12 +177,10 @@ def generate_reaching(n_tasks, task_loss, robot, config, viz=None):
 
     for i in trange(n_tasks):
         # generate random goal location
-        r = config.r[0] + config.r[1]*np.random.rand()
-        z = config.z[0] + config.z[1]*np.random.randint()
-        theta = config.theta[0] + config.theta[1]*np.random.rand()
-        goal = torch.squeeze(torch.tensor([r*np.sin(theta), 
-                                            r*np.cos(theta), 
-                                            z]))
+        r = config.r_range[0] + config.r_range[1]*np.random.rand()
+        z = config.z_range[0] + config.z_range[1]*np.random.rand()
+        th = config.th_range[0] + config.th_range[1]*np.random.rand()
+        goal = torch.tensor([r*np.sin(th), r*np.cos(th), z])
         
         # generate random robot configuration
         if i == 0 or np.random.randint(config.n_restart) == 0:
