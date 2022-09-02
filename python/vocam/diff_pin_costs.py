@@ -115,3 +115,40 @@ class DiffFrameVelocityCost(Function):
         der = ctx.der # derivatives wrt to velocity
         return der.t()@grad, None, None, None, None
 
+class DiffFramePlacementCost(Function):
+    """
+    This cost provides gradients wrt joint position and velocity for the final end effector/frame placement
+    """
+    @staticmethod
+    def forward(ctx, state, model, data, f_id, M_des):
+        """
+        Input:
+            state : vector (q, dq)
+            model : pinocchio robot model
+            data : pinocchio robot data
+            f_id : frame id for which derivatives are desired
+        """
+        state = state.double().detach().numpy()
+        nq, nv = model.nq, model.nv
+        pin.forwardKinematics(model, data, state[0:nq], state[nq:nq + nv], np.zeros(nv))
+        pin.updateFramePlacements(model, data)
+        
+        se3_error = pin.SE3(M_des).inverse() * data.oMf[f_id]
+        error = np.array(pin.log6(se3_error))
+        
+        J_error = pin.Jlog6(se3_error)       
+        J = pin.computeFrameJacobian(model, data, state[0:nq], f_id, pin.ReferenceFrame.LOCAL)
+        
+        ctx.J = torch.tensor(J_error @ J)
+        
+        return torch.tensor(error)
+
+    @staticmethod
+    def backward(ctx, grad):
+        
+        jac = ctx.J
+        fk_q = jac.t()@grad # derivative wrt joint positions
+        fk_dq = torch.zeros(len(fk_q)) # derivative wrt joint velocities
+        
+        return torch.hstack((fk_q, fk_dq)), None, None, None, None
+        

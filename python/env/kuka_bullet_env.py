@@ -16,7 +16,8 @@ class KukaBulletEnv:
 
         # Create a Pybullet simulation environment
         self.env = BulletEnvWithGround(p.GUI)
-
+        p.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
+        p.resetDebugVisualizerCamera(1.5, 70, -20, (0.0, 0.0, 0.2)) 
         # Create a robot instance. This initializes the simulator as well.
         self.robot = IiwaRobot()
         self.pinModel = self.robot.pin_robot.model

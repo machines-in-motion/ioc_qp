@@ -7,6 +7,7 @@ import os
 python_path = pathlib.Path('.').absolute().parent/'python'
 os.sys.path.insert(1, str(python_path))
 
+import pinocchio as pin
 import numpy as np
 from env.kuka_bullet_env import KukaBulletEnv
 import torch
@@ -20,26 +21,51 @@ import pybullet as p
 from robot_properties_kuka.config import IiwaConfig
 
 import time
-from vocam.diff_pin_costs import DiffFrameTranslationCost, DiffFrameVelocityCost
+from vocam.diff_pin_costs import DiffFrameTranslationCost, DiffFrameVelocityCost, DiffFramePlacementCost
+from scipy.spatial.transform import Rotation as R
+
 
 robot = IiwaConfig.buildRobotWrapper()
 model, data = robot.model, robot.data
 f_id = model.getFrameId("EE")
-
+ 
 dtc = DiffFrameTranslationCost.apply
 dvc = DiffFrameVelocityCost.apply
+dfc = DiffFramePlacementCost.apply
 
-def quadratic_loss(q_pred, x_des, nq, n_col):
-    loss = 4.0e1*torch.linalg.norm(dtc(q_pred[-2*nq:], model, data, f_id) - x_des)
+ori_mat = pin.utils.rpyToMatrix(-np.pi/4, np.pi/2, 0)
+# ori_mat = pin.utils.rpyToMatrix(-np.pi/4, np.pi/4, 0)
+# ori_mat = pin.utils.rpyToMatrix(np.pi/6, np.pi/2, -np.pi/6)
+
+quat = R.from_matrix(ori_mat).as_quat()
+
+def quadratic_loss(q_pred, goal, nq, n_col):
+    
+    O_des = np.array(ori_mat)
+#     error = doc(q_pred[-2*nq:], model, data, f_id, O_des)
+#       wt = 1e1*np.eye(3)
+  
+    M_des = np.eye(4,4)
+    M_des[0:3,0:3] = O_des
+    M_des[0:3,3] = goal
+    wt = 3.5e2*np.eye(6)
+    wt[3,3] = 2e2
+    wt[4,4] = 2e2
+    wt[5,5] = 2e2
+    error = dfc(q_pred[-2*nq:], model, data, f_id, M_des)
+    
+    loss = error.t()@torch.tensor(wt)@error
+    
+    
     loss += 2.5e0*torch.linalg.norm(dvc(q_pred[-2*nq:], torch.zeros(nq), model, data, f_id)) # asking for zero velocity
-    loss += 1e-2*torch.linalg.norm(q_pred[-2*nq:-nq]) # joint regularization
+    loss += 1e-3*torch.linalg.norm(q_pred[-2*nq:-nq]) # joint regularization
     
     for i in range(n_col):    
-        loss += 1e0*torch.linalg.norm(dtc(q_pred[(3*i)*nq: (3*i+2)*nq], model, data, f_id) - x_des)
+        loss += 2e0 * torch.linalg.norm(dtc(q_pred[(3*i)*nq: (3*i+2)*nq], model, data, f_id) - goal)
         loss += 5e-1*torch.linalg.norm(dvc(q_pred[(3*i)*nq: (3*i+2)*nq], q_pred[(3*i+2)*nq:(3*i+3)*nq], model, data, f_id)) # asking for zero velocity
         loss += 1e-2*torch.linalg.norm(q_pred[(3*i+2)*nq: (3*i+3)*nq]) # control regularization
         loss += 2e-1*torch.linalg.norm(q_pred[(3*i+1)*nq: (3*i+2)*nq]) # velocity regularization
-        loss += 3e-3*torch.linalg.norm(q_pred[(3*i)*nq: (3*i+1)*nq]) # joint regularization
+        loss += 5e-3*torch.linalg.norm(q_pred[(3*i)*nq: (3*i+1)*nq]) # joint regularization
         loss += 2e-3*torch.linalg.norm(q_pred[(3*i)*nq+3: (3*i+1)*nq])
         loss += 4e-3*torch.linalg.norm(q_pred[(3*i)*nq+5])
         
@@ -97,23 +123,27 @@ robot.reset_robot(q_init, np.zeros_like(q_des))
 
 count = 0
 state = np.zeros(2*nq)
-eps = 15
+eps = 22
 nb_switches = 1
 count = 0
-pln_freq = n_col-2
-lag = 1
-# robot.robot.start_recording("./test.mp4")
+pln_freq = n_col-1
+lag = 0
+
 target = p.loadURDF("./sphere.urdf", [0,0,0])
+q_arr = []
+dq_arr = []
 
 for v in range(nb_switches*n_col*eps) :
 
     q, dq = robot.get_state()
+
     if v % (n_col*eps) == 0:
-        x_des = x_des_arr[np.random.randint(len(x_des_arr))]
-        p.resetBasePositionAndOrientation(target, x_des, (0,0,0,1))
+        # x_des = x_des_arr[np.random.randint(len(x_des_arr))]
+        x_des = x_des_arr[0]
+        p.resetBasePositionAndOrientation(target, x_des, quat)
         # print("running feedback number : " + str(j),  end = '\r', flush = True )
         robot.plan.append(1)
-    
+
     if v == 0:
         x_pred = regress(q, dq)
 
@@ -146,7 +176,16 @@ for v in range(nb_switches*n_col*eps) :
         else:
             robot.plan.append(0)
         robot.send_id_command(q_int[i], dq_int[i], a_int[i])
-        time.sleep(0.0005)
+        # time.sleep(0.0005)
+        q, dq = robot.get_state()
+        q_arr.append(q)
+        dq_arr.append(dq)
 
-robot.plot()
+
+robot.robot.start_recording("./ori1.mp4")
+for i in range(len(q_arr)):
+    robot.reset_robot(q_arr[i], dq_arr[i])
+    time.sleep(0.001)
+
+# robot.plot()
 # robot.robot.stop_recording("./test.mp4")
