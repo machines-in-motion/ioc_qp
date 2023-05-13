@@ -28,3 +28,11 @@ If this code base is used in your research please cite the following paper
  
  1. Avadesh Meduri
  2. Huaijiang Zhu
+
+## Copyrights
+
+Copyright(c) 2023 New York University
+
+## License
+
+BSD 3-Clause License
